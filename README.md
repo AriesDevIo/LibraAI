@@ -78,4 +78,10 @@ The `@theme inline` block registers these variables as Tailwind tokens, so utili
 
 > The "Sign in" / "Get started" buttons currently link to `/login` and `/register`, which are intentional placeholders until the auth step.
 
+## Arbeitsjournal
+
+A dated work log (planning, weekly progress, hours, and OWASP measures) lives in [`ARBEITSJOURNAL.md`](ARBEITSJOURNAL.md).
+
+---
+
 _Built as a security-focused school project._
