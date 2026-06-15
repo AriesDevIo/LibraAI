@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="258 147 573.49 735">
+  <!-- Libra brand mark — transparent, two-tone. Stem follows the OS color
+       scheme (dark ink on light, light ink on dark); arrow stays brand violet. -->
+  <style>
+    .stem { fill: #2c2733; }
+    @media (prefers-color-scheme: dark) { .stem { fill: #ece9f3; } }
+  </style>
+  <path class="stem" d="M278 514.51 L278 167 L342.5 167 L407 167 L406.75 514.25 L406.5 861.5 L342.25 861.76 L278 862.01 Z"/>
+  <path fill="#7c3aed" d="M536 733.28 L536 604.55 L581.75 558.76 C606.91 533.58 627.61 512.64 627.75 512.23 C627.89 511.82 607.31 490.79 582 465.51 L536 419.55 L536 293.28 L536 167 L600.5 167 L665 167 L665 266.25 L665 365.49 L738.25 438.75 L811.49 512 L738.25 585.25 L665.01 658.5 L664.75 760 L664.5 861.5 L600.25 861.76 L536 862.01 Z"/>
+</svg>

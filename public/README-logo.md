@@ -1,13 +1,14 @@
 # Libra logo asset
 
-Drop your crown logo here as:
+The brand mark is no longer a dropped-in PNG. It's an inline, background-less
+SVG baked into the [`Logo`](../src/components/shared/Logo.tsx) component, so it
+adapts to light/dark via CSS-variable fills with nothing to 404.
 
-    public/LibraNoBg.png
+Assets:
 
-That exact filename is what the `Logo` component
-(`src/components/shared/Logo.tsx`) loads everywhere — navbar, footer,
-and the mockup. A transparent-background PNG (square, ideally 256×256 or
-larger) works best.
+- [`public/libra-mark.svg`](libra-mark.svg) — standalone mark (two-tone,
+  OS-color-scheme aware) for decks, docs, and external use.
+- [`src/app/icon.svg`](../src/app/icon.svg) — the matching browser-tab favicon.
 
-Until that file exists, the brand mark falls back to a built-in violet
-crown glyph, so nothing ever shows a broken image.
+To switch the in-app treatment, pass `variant="violet" | "twotone" | "lavender"`
+to the `Logo` component (default: `twotone`).

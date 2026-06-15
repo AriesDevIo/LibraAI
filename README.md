@@ -49,7 +49,7 @@ src/
 
 ### Brand logo
 
-The crown mark loads from `public/LibraNoBg.png` (see [`public/README-logo.md`](public/README-logo.md)). Drop that file in and it appears in the navbar, footer, and mockup; until then a built-in violet crown glyph stands in, so the brand never renders a broken image.
+The brand mark is an inline, background-less SVG baked into the [`Logo`](src/components/shared/Logo.tsx) component — nothing to drop in, nothing to 404. It uses CSS-variable fills so it adapts to light/dark automatically, in a two-tone treatment (the stem in theme ink, the arrow in brand violet). A standalone copy lives at [`public/libra-mark.svg`](public/libra-mark.svg) for reuse (decks, docs), and [`src/app/icon.svg`](src/app/icon.svg) is the matching browser-tab favicon. Pass `variant="violet" | "twotone" | "lavender"` to `Logo` to switch treatments.
 
 ## Design system
 
