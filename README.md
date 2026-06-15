@@ -1,5 +1,7 @@
 # Libra 👑
 
+Planning: https://docs.google.com/document/d/1UIwTsLSTqNp8ZQLog38L2qGsicQjexujxpY_zD2XE-M/edit?tab=t.0
+
 **Libra** is a secure, AI-powered note-taking and collaboration platform — a security-first alternative to Notion. Block-based editing, a freeform canvas, document sharing, and a built-in AI assistant, all built on a foundation of strict per-user data isolation.
 
 > Security is the headline feature. Libra is engineered against the OWASP Top 10 (2025) from the first line of code: passwordless login, Row Level Security, input sanitization, and a prompt-injection-resistant AI.
