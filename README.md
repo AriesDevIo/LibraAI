@@ -39,14 +39,21 @@ src/
 ├─ app/
 │  ├─ layout.tsx        # root layout: Poppins font, metadata, pre-paint theme script
 │  ├─ page.tsx          # home route — composes the landing sections
-│  └─ globals.css       # design system: @theme tokens, light/dark, libra- keyframes
+│  ├─ globals.css       # design system: @theme tokens, light/dark, libra- keyframes
+│  ├─ (auth)/           # login & register pages + passwordless server actions + shared layout
+│  ├─ auth/callback/    # magic-link callback (code → session)
+│  ├─ dashboard/        # minimal authenticated landing
+│  └─ editor/           # block editor demo route
 ├─ components/
 │  ├─ shared/           # Logo, ThemeToggle, PillLink, SectionHeading
-│  └─ marketing/        # Navbar, Hero, DocumentMockup, Features, HowItWorks, Security, CTABanner, Footer
-├─ hooks/
-│  └─ useTheme.ts       # 3-mode theme controller (system → light → dark), SSR-safe
-└─ types/
-   └─ theme.ts          # ThemeMode union + cycle order
+│  ├─ marketing/        # Navbar, Hero, DocumentMockup, Features, HowItWorks, Security, CTABanner, Footer
+│  └─ editor/           # BlockEditor, Block, SlashMenu, Toolbar, types
+├─ lib/supabase/        # browser + server Supabase clients (RLS-enforced)
+├─ hooks/useTheme.ts    # 3-mode theme controller (system → light → dark), SSR-safe
+├─ types/theme.ts       # ThemeMode union + cycle order
+└─ proxy.ts             # session refresh + route protection (Next renames middleware → proxy)
+
+supabase/migrations/    # 0001_profiles.sql, 0002_documents.sql (tables + RLS)
 ```
 
 ### Brand logo
@@ -64,6 +71,18 @@ The `@theme inline` block registers these variables as Tailwind tokens, so utili
 
 ---
 
+## Security (OWASP Top 10 2025)
+
+Security is the graded focus of this project. Implemented so far:
+
+- **A01 Broken Access Control** — Row Level Security on every table; owner-only policies (`auth.uid() = id/user_id`), deliberately **no** permissive `using(true)`. `proxy.ts` redirects unauthenticated users away from protected routes (verified: `/dashboard` → `/login`).
+- **A02 Security Misconfiguration** — secrets only in gitignored `.env.local`; DB functions pin `search_path = ''`; the auth callback validates `next` to a same-site path (no open redirect).
+- **A05 Injection** — the editor never renders untrusted input as HTML (no `dangerouslySetInnerHTML` on user content); image URLs are validated.
+- **A07 Authentication Failures** — passwordless login (no password to leak); no user-enumeration on login; rate-limit-aware (HTTP 429) messaging.
+- **A09 Logging & Alerting** — Supabase logs capture auth/RLS events (exercised in the pentest phase).
+
+The full threat model, 24-hour plan, and the **T01–T05 test matrix** are documented in [`ARBEITSJOURNAL.md`](ARBEITSJOURNAL.md).
+
 ## Roadmap
 
 ### ✅ Step 1 — Foundation & landing page (done)
@@ -72,13 +91,21 @@ The `@theme inline` block registers these variables as Tailwind tokens, so utili
 - Polished marketing landing page: Navbar, Hero (with floating mockup), Features, How It Works, Security, CTA banner, Footer
 - Theme toggle with persistence; mobile-responsive and accessible
 
-### 🔜 Upcoming steps (not built yet)
-- **Authentication** — passwordless magic-link / OTP login (`/login`, `/register` routes)
-- **Supabase backend** — Postgres, Auth, and Row Level Security policies
-- **Editor** — block-based text + image editor, and a freeform canvas mode
-- **AI assistant** — text generation and web image fetching, hardened against prompt injection
+### ✅ Step 2 — Authentication & secure backend (done)
+- Passwordless email login & registration (magic-link / OTP) via Supabase Auth — `/login`, `/register`
+- Supabase Postgres with **Row Level Security**: `profiles` + `documents` tables, owner-only policies
+- Session handling & route protection in `proxy.ts`; a profile row is auto-created on sign-up (DB trigger)
+- Minimal authenticated `/dashboard` landing
 
-> The "Sign in" / "Get started" buttons currently link to `/login` and `/register`, which are intentional placeholders until the auth step.
+### ✅ Step 3 — Block editor (done)
+- Notion-style block editor at `/editor` — headings, lists, image blocks, text colours, slash menu
+- XSS-safe rendering (no raw HTML for user content)
+
+### 🔜 Upcoming steps
+- **Persist documents** — wire the editor to the `documents` table
+- **Freeform canvas** and **document sharing** between users
+- **AI assistant** — text generation and web image fetching, hardened against prompt injection
+- **Penetration testing** — execute the OWASP test matrix (T01–T05)
 
 ## Arbeitsjournal
 
