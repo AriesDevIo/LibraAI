@@ -51,7 +51,9 @@ export async function proxy(request: NextRequest) {
     pathname === "/" ||
     isAuthPage ||
     pathname.startsWith("/auth/") ||
-    pathname.startsWith("/editor") || // standalone editor demo
+    pathname.startsWith("/editor") || // standalone demo
+    pathname.startsWith("/canvas") || // standalone demo
+    pathname.startsWith("/assistant") || // standalone demo
     pathname === "/privacy" ||
     pathname === "/terms";
   const isProtected =
