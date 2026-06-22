@@ -1,75 +1,86 @@
 # Arbeitsjournal — Libra
 
 **Projekt:** Libra — sichere, KI-gestützte Notiz- & Kollaborationsplattform (Notion-Alternative)
-**Autor:** Andrin Rüegg · **Klasse:** AP23a · **Schule:** TBZ (Technische Berufsschule Zürich)
-**Methodik:** Agile Entwicklung mit KI-Werkzeugen („Vibe Coding"); der Effizienzgewinn wird gezielt in Security-Implementierung und Penetration Testing reinvestiert.
-**Sicherheitsrahmen:** OWASP Top 10 (2025) — A01, A02, A05, A07, A09
-**Stand:** 15. Juni 2026
+**Autor:** Andrin Rüegg · **Klasse:** AP23a · **Schule:** TBZ
+**Methodik:** „Vibe Coding" — Code grösstenteils KI-gestützt generiert (Codex und Claude Code), wie im Projektantrag deklariert. Die erfassten Zeiten sind die **effektive Eigenleistung**: Projektwahl & Konzept, Prompting, Review/Test der Ergebnisse, Konfiguration (Supabase), Security und Dokumentation.
+**Unterricht:** pro Block 4 Lektionen à 45 Min. (montags); davon teils ~20 Min. Klassenvideo + Pausen — pro Lektion also weniger als 45 Min. effektive Projektzeit.
+**Sicherheitsrahmen:** OWASP Top 10 (2025)
+**Stand:** 22.06.2026
 
-> Hinweis: Die Zeitangaben sind aus Git-Commits und Datei-Zeitstempeln rekonstruiert und auf das geplante 24-Stunden-Budget abgestimmt.
-
----
-
-## Stundenübersicht (Bezug Projektantrag)
-
-| Phase | Geplant | Geleistet | Status |
-|-------|--------:|----------:|--------|
-| Planung & Architektur (Projektantrag) | — | 2.0 h | ✅ erledigt |
-| Phase 1 — Initialisierung & Architektur | 3 h | 5.0 h | ✅ erledigt |
-| Phase 2 — Core-Features & AI | 7–10 h | 8.0 h | 🟡 grösstenteils (Auth + Editor ✅, KI-Assistent / Canvas / Sharing offen) |
-| Phase 3 — Dedizierte Security-Härtung | 6 h | 3.0 h | 🟡 teilweise (RLS, Input-Sanitization, Anti-Enumeration umgesetzt) |
-| Phase 4 — Security Testing & Pentesting | 5 h | — | 🔜 offen (Testmatrix T01–T05 vorbereitet) |
-| Phase 5 — Dokumentation & Review | 3 h | 1.5 h | 🟡 laufend (Journal, README) |
-| **Total** | **24 h** | **≈ 19.5 h** | |
+> Hinweis: Der generierte Code-Umfang ist grösser als die erfassten Stunden — das ist beim Vibe Coding so gewollt. Die Eigenleistung liegt im Konzipieren, Prompten, Prüfen, Konfigurieren und Absichern, nicht im manuellen Tippen jeder Zeile.
 
 ---
 
-## Planung — 1. Juni 2026
+## Stundenübersicht (effektive Eigenleistung)
 
-| Datum | Zeit | Dauer | Tätigkeit | Resultat / Bezug |
-|-------|------|------:|-----------|------------------|
-| 01.06.2026 | 14:00–16:00 | 2.0 h | Projektantrag, Architektur- und Sicherheitskonzept: Funktionsumfang, OWASP-Zuordnung, 24-Stunden-Plan, Testmatrix | Projektantrag / Konzept |
-
----
-
-## Woche 1 — Fundament & Landingpage (8. Juni 2026)
-
-| Datum | Zeit | Dauer | Tätigkeit | Resultat / Bezug |
-|-------|------|------:|-----------|------------------|
-| 08.06.2026 | 09:00–11:00 | 2.0 h | Projekt-Setup: Next.js 16, React 19, TypeScript (strict), Tailwind v4, ESLint/PostCSS | Lauffähiges Gerüst — Phase 1 |
-| 08.06.2026 | 11:00–14:00 | 3.0 h | Design-System: CSS-Variablen-Tokens, Light-/Dark-Mode, `libra-`-Keyframes, Poppins-Font, App-Shell | `globals.css`, Layout, `useTheme` — Phase 1 |
-| 08.06.2026 | 14:30–16:00 | 1.5 h | Wiederverwendbare Komponenten: Logo, ThemeToggle, PillLink, SectionHeading | `components/shared/` |
-| 08.06.2026 | 16:00–19:00 | 3.0 h | Marketing-Landingpage: Navbar, Hero (mit Mockup), Features, How-It-Works, Security, CTA, Footer | Vollständige, responsive Landingpage |
-| 08.06.2026 | 19:00–20:00 | 1.0 h | Public-Assets, Screenshot-Skript, README | Dokumentation & Assets |
-| | | **10.5 h** | **Total Woche 1** | |
+| Block | Datum | Fokus | Effektiv |
+|-------|-------|-------|---------:|
+| Block 03 | 01.06.2026 | Projektwahl, Konzept & Setup | ~1.5 h |
+| Block 04 | 08.06.2026 | Fundament & Landingpage | ~1.75 h |
+| Block 05 | 15.06.2026 | Auth, Supabase & Editor | ~2.0 h |
+| Block 06 | 22.06.2026 | Persistenz, Canvas, KI & Security | ~2.0 h |
+| **Total** | | | **~7.25 h** |
 
 ---
 
-## Woche 2 — Authentifizierung, Backend & Editor (15. Juni 2026)
+## Block 03 — 01.06.2026 · Projektwahl, Konzept & Setup
 
-| Datum | Zeit | Dauer | Tätigkeit | Resultat / Bezug |
-|-------|------|------:|-----------|------------------|
-| 15.06.2026 | 09:00–10:00 | 1.0 h | Branding: Logo als transparentes, zweifarbiges SVG (Light/Dark) + Favicon | `Logo.tsx`, `icon.svg` |
-| 15.06.2026 | 10:00–13:00 | 3.0 h | Auth- & Supabase-Fundament: Browser-/Server-Clients, Proxy (Session-Refresh & Route-Schutz), passwortlose Server-Actions, `profiles`-Migration mit RLS | Foundation — A01, A02, A07 |
-| 15.06.2026 | 13:30–15:30 | 2.0 h | Login- & Register-Seiten (passwortlos, 6-stelliger Magic-Code); parallele Umsetzung per Multi-Agent-Workflow | `/login`, `/register` — A07 |
-| 15.06.2026 | 15:30–17:00 | 1.5 h | Block-Editor: Block-Typen, Slash-Menü, Textfarben; XSS-sicheres Rendering | `/editor` — A05 |
-| 15.06.2026 | 17:00–18:30 | 1.5 h | Supabase-Projekt erstellt, `.env.local`, Migration angewendet; End-to-End-Test: Registrierung → Profil-Trigger, Zugriffsschutz `/dashboard` | Live-Backend, verifiziert — A01/A07 |
-| | | **9.0 h** | **Total Woche 2** | |
+Erster Block: vor allem **Projekt ausgewählt und geplant**, noch wenig Code.
+
+| Lektion | Effektiv | Tätigkeit |
+|---------|---------:|-----------|
+| 1 | ~30 Min | Projektidee gewählt: sichere Notion-Alternative; Abgrenzung & Ziele |
+| 2 | ~30 Min | Projektantrag / Konzept (Google Doc): Funktionsumfang, OWASP-Zuordnung |
+| 3 | ~20 Min | 24-Stunden-Plan & Testmatrix grob skizziert (~20 Min Klassenvideo) |
+| 4 | ~10 Min | Repository + Next.js-Gerüst angelegt (Rest: Theorie) |
+
+## Block 04 — 08.06.2026 · Fundament & Landingpage
+
+| Lektion | Effektiv | Tätigkeit (Code per Vibe Coding) |
+|---------|---------:|----------------------------------|
+| 1 | ~25 Min | Projektgerüst (Next.js, TypeScript, Tailwind) fertig konfiguriert, geprüft |
+| 2 | ~35 Min | Design-System (Farben, Light/Dark, Schrift) generiert und angepasst |
+| 3 | ~35 Min | Landingpage-Sektionen (Hero, Features, Footer …) generiert, durchgesehen |
+| 4 | ~10 Min | README & Assets (Rest: Klassenvideo) |
+
+## Block 05 — 15.06.2026 · Auth, Supabase & Editor
+
+| Lektion | Effektiv | Tätigkeit |
+|---------|---------:|-----------|
+| 1 | ~30 Min | Logo + passwortloser Auth-Flow generiert, geprüft |
+| 2 | ~40 Min | **Supabase** (manuelle Konfiguration): Projekt erstellt, `.env.local` gesetzt, Migration angewendet |
+| 3 | ~35 Min | Login-/Register-Seiten + Block-Editor generiert, Review |
+| 4 | ~25 Min | End-to-End-Test: Registrierung → Profil-Trigger, Zugriffsschutz `/dashboard` |
+
+## Block 06 — 22.06.2026 · Persistenz, Canvas, KI & Security
+
+| Lektion | Effektiv | Tätigkeit |
+|---------|---------:|-----------|
+| 1 | ~35 Min | Dokumente speichern (Editor ↔ Supabase, RLS) generiert, getestet |
+| 2 | ~35 Min | Freeform-Canvas + KI-Assistent generiert, Review |
+| 3 | ~30 Min | Security-Header, Input-Sanitization, Pentest-Protokoll (T01–T05) |
+| 4 | ~20 Min | Dokumentation, Arbeitsjournal, Supabase-Screenshots |
 
 ---
+
+## Supabase (Backend)
+
+Siehe Screenshots in [`docs/screenshots/`](docs/screenshots/).
+
+- Free-Tier-Projekt **`libra`** (Organisation „Libra"), Region Europa.
+- Tabellen **`profiles`** und **`documents`** mit **Row Level Security** — nur der Eigentümer kann seine Zeilen lesen/schreiben (`auth.uid() = user_id`); bewusst keine `using(true)`-Policy.
+- Passwortlose Authentifizierung (E-Mail-OTP / Magic-Link); das Profil wird beim Sign-up automatisch per DB-Trigger angelegt.
+- `.env.local` enthält Projekt-URL + Publishable Key (Secrets sind **nicht** im Repository).
 
 ## Umgesetzte Sicherheitsmassnahmen (OWASP Top 10 2025)
 
-- **A01 — Broken Access Control:** Row Level Security auf `profiles` (nur eigene Zeile lesbar/schreibbar); bewusst keine `using(true)`-Policy; Proxy schützt `/dashboard` (Umleitung auf `/login` für nicht angemeldete Nutzer). ✅ getestet.
-- **A02 — Security Misconfiguration:** Secrets in `.env.local` (nicht im Repo); DB-Funktionen mit fixiertem `search_path`; Callback gegen Open-Redirect abgesichert.
-- **A05 — Injection:** Editor rendert keine unsicheren Inhalte (kein `dangerouslySetInnerHTML` auf Nutzereingaben), Bild-URLs validiert.
-- **A07 — Authentication Failures:** Passwortloses Login (OTP/Magic-Link), keine Benutzer-Enumeration, Rate-Limit-Meldung (HTTP 429).
+- **A01 — Broken Access Control:** RLS auf `profiles` und `documents` (nur eigene Zeilen); Proxy schützt `/dashboard` (Umleitung auf `/login`). Getestet: das Aufrufen eines fremden Dokuments per ID liefert 404 (T01).
+- **A02 — Security Misconfiguration:** Secrets in `.env.local` (nicht im Repo); Security-Header (HSTS, X-Frame-Options, CSP); DB-Funktionen mit fixiertem `search_path`; Callback gegen Open-Redirect abgesichert.
+- **A05 — Injection:** Editor rendert keine unsicheren Inhalte (kein `dangerouslySetInnerHTML`); Bild-URLs validiert; KI-System-Prompt gegen Prompt-Injection gehärtet.
+- **A07 — Authentication Failures:** Passwortloses Login, keine Benutzer-Enumeration, Rate-Limit-Meldung (HTTP 429).
 
----
+## Nächste Schritte
 
-## Nächste Schritte (offen)
-
-- **Phase 2:** KI-Assistent (Text generieren, Bilder online holen), Freeform-Canvas, Sharing zwischen Nutzern.
-- **Phase 3:** Feinschliff der RLS-Policies, serverseitiges Rate-Limiting, Absicherung des KI-System-Prompts (Prompt-Injection).
-- **Phase 4:** Penetration Testing gemäss Testmatrix **T01–T05** (ID-Manipulation, XSS, Prompt-Injection, Brute-Force, Log-Prüfung).
-- **Phase 5:** Finales Testprotokoll & Projektdemonstration.
+- Penetration Testing vollständig durchführen (Testmatrix **T01–T05**) und protokollieren.
+- Sharing von Dokumenten zwischen Nutzern.
+- Finales Testprotokoll & Projektdemonstration.
