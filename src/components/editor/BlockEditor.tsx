@@ -2,6 +2,7 @@
 
 import {
   useCallback,
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -15,6 +16,7 @@ import {
   filterBlockTypes,
   isListBlock,
   isTextBlock,
+  reserveIds,
   type Block as BlockModel,
   type BlockType,
   type ColorKey,
@@ -23,9 +25,20 @@ import {
 
 type Caret = "start" | "end" | number;
 
-/** Seed document. Explicit (non-generated) ids so server and client render
- *  identically — no hydration mismatch, no Math.random()/Date.now() needed. */
-function initialBlocks(): BlockModel[] {
+export interface BlockEditorProps {
+  /** Initial title (document mode). Defaults to "Untitled". */
+  initialTitle?: string;
+  /** Initial blocks (document mode). When omitted, the standalone demo seed is
+   *  used; when an empty array is passed, a single empty paragraph is shown. */
+  initialBlocks?: BlockModel[];
+  /** Fired (on every edit) with the current title + blocks. The parent debounces
+   *  and persists. Omit for the standalone, non-persisted demo. */
+  onChange?: (data: { title: string; blocks: BlockModel[] }) => void;
+}
+
+/** Seed document for the standalone demo. Explicit (non-generated) ids so server
+ *  and client render identically — no hydration mismatch. */
+function seedBlocks(): BlockModel[] {
   const mk = (
     id: string,
     type: BlockType,
@@ -64,10 +77,37 @@ function initialBlocks(): BlockModel[] {
   ];
 }
 
-export default function BlockEditor() {
-  const [title, setTitle] = useState("Untitled");
-  const [blocks, setBlocks] = useState<BlockModel[]>(initialBlocks);
-  const [activeId, setActiveId] = useState<string | null>("seed_1");
+export default function BlockEditor({
+  initialTitle,
+  initialBlocks,
+  onChange,
+}: BlockEditorProps = {}) {
+  const [title, setTitle] = useState(initialTitle ?? "Untitled");
+  const [blocks, setBlocks] = useState<BlockModel[]>(() => {
+    if (initialBlocks) {
+      return initialBlocks.length ? initialBlocks : [createBlock("paragraph")];
+    }
+    return seedBlocks();
+  });
+  const [activeId, setActiveId] = useState<string | null>(
+    initialBlocks ? null : "seed_1",
+  );
+
+  // Document mode: emit edits to the parent (skipping the initial mount) and
+  // reserve ids past the loaded blocks so new blocks never collide.
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const mounted = useRef(false);
+  useEffect(() => {
+    reserveIds(blocks);
+    mounted.current = true;
+    // run once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (!mounted.current) return;
+    onChangeRef.current?.({ title, blocks });
+  }, [title, blocks]);
   /** Slash menu state: which block triggered it, the query, and the cursor. */
   const [slash, setSlash] = useState<{
     blockId: string;

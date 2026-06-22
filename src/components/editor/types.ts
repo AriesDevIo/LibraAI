@@ -193,6 +193,18 @@ export function newId(): string {
   return `blk_${idCounter}`;
 }
 
+/**
+ * Bump the id counter past any existing `blk_N` ids so blocks created after
+ * loading a saved document never collide with the loaded ones. Call once on the
+ * client after mount (never during SSR render — it would desync ids).
+ */
+export function reserveIds(blocks: { id: string }[]): void {
+  for (const b of blocks) {
+    const m = /^blk_(\d+)$/.exec(b.id);
+    if (m) idCounter = Math.max(idCounter, Number(m[1]));
+  }
+}
+
 /** Create a fresh block with sensible defaults. */
 export function createBlock(
   type: BlockType = "paragraph",
