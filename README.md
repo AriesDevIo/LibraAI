@@ -8,6 +8,26 @@ Planning: https://docs.google.com/document/d/1UIwTsLSTqNp8ZQLog38L2qGsicQjexujxp
 
 ---
 
+## Screenshots
+
+### Application
+
+| Landing page | Login (passwordless) | Register |
+|---|---|---|
+| ![Landing](docs/screenshots/app-1-landing.png) | ![Login](docs/screenshots/app-2-login.png) | ![Register](docs/screenshots/app-3-register.png) |
+
+| Block editor | Freeform canvas | AI assistant |
+|---|---|---|
+| ![Editor](docs/screenshots/app-4-editor.png) | ![Canvas](docs/screenshots/app-5-canvas.png) | ![Assistant](docs/screenshots/app-6-assistant.png) |
+
+### Supabase backend (Row Level Security)
+
+| Tables (`profiles`, `documents`) | RLS policies | Auth users |
+|---|---|---|
+| ![Tables](docs/screenshots/supabase-tables.png) | ![Policies](docs/screenshots/supabase-rls-policies.png) | ![Users](docs/screenshots/supabase-auth-users.png) |
+
+> Secrets live only in a local `.env.local` (gitignored). These screenshots document the live backend without exposing any keys.
+
 ## Tech stack
 
 - **Next.js 16** (App Router, `/src` directory)
@@ -38,22 +58,32 @@ npm start        # serve the production build
 src/
 ├─ app/
 │  ├─ layout.tsx        # root layout: Poppins font, metadata, pre-paint theme script
-│  ├─ page.tsx          # home route — composes the landing sections
+│  ├─ page.tsx          # home route — landing sections
 │  ├─ globals.css       # design system: @theme tokens, light/dark, libra- keyframes
 │  ├─ (auth)/           # login & register pages + passwordless server actions + shared layout
 │  ├─ auth/callback/    # magic-link callback (code → session)
-│  ├─ dashboard/        # minimal authenticated landing
-│  └─ editor/           # block editor demo route
+│  ├─ dashboard/        # documents list + actions; doc/[id] = editor with autosave
+│  ├─ editor/           # standalone block-editor demo
+│  ├─ canvas/           # standalone freeform-canvas demo
+│  ├─ assistant/        # standalone AI-assistant demo
+│  └─ api/ai/           # AI chat route (Claude)
 ├─ components/
 │  ├─ shared/           # Logo, ThemeToggle, PillLink, SectionHeading
-│  ├─ marketing/        # Navbar, Hero, DocumentMockup, Features, HowItWorks, Security, CTABanner, Footer
-│  └─ editor/           # BlockEditor, Block, SlashMenu, Toolbar, types
-├─ lib/supabase/        # browser + server Supabase clients (RLS-enforced)
+│  ├─ marketing/        # Navbar, Hero, Features, HowItWorks, Security, CTABanner, Footer
+│  ├─ editor/           # BlockEditor, Block, SlashMenu, Toolbar, types
+│  ├─ canvas/           # Canvas, objects, toolbar
+│  └─ ai/               # AssistantPanel
+├─ lib/
+│  ├─ supabase/         # browser + server clients (RLS-enforced)
+│  ├─ documents.ts      # RLS-scoped document reads
+│  ├─ ai/               # system prompt (injection-hardened), config, rate limit
+│  └─ sanitize.ts       # text / URL sanitisation helpers
 ├─ hooks/useTheme.ts    # 3-mode theme controller (system → light → dark), SSR-safe
 ├─ types/theme.ts       # ThemeMode union + cycle order
 └─ proxy.ts             # session refresh + route protection (Next renames middleware → proxy)
 
 supabase/migrations/    # 0001_profiles.sql, 0002_documents.sql (tables + RLS)
+docs/                   # SECURITY-TESTS.md (pentest protocol), screenshots/
 ```
 
 ### Brand logo
@@ -101,11 +131,14 @@ The full threat model, 24-hour plan, and the **T01–T05 test matrix** are docum
 - Notion-style block editor at `/editor` — headings, lists, image blocks, text colours, slash menu
 - XSS-safe rendering (no raw HTML for user content)
 
+### ✅ Step 4 — Persistence, canvas & AI (done)
+- Documents persist per user (editor + dashboard ↔ Supabase, RLS) — `/dashboard`, `/dashboard/doc/[id]`
+- Freeform canvas with draggable text/image objects — `/canvas`
+- AI assistant (Claude) for text generation + image fetch, hardened against prompt injection — `/assistant`
+
 ### 🔜 Upcoming steps
-- **Persist documents** — wire the editor to the `documents` table
-- **Freeform canvas** and **document sharing** between users
-- **AI assistant** — text generation and web image fetching, hardened against prompt injection
-- **Penetration testing** — execute the OWASP test matrix (T01–T05)
+- **Document sharing** between users
+- **Penetration testing** — complete the OWASP test matrix (T01–T05); see [`docs/SECURITY-TESTS.md`](docs/SECURITY-TESTS.md)
 
 ## Arbeitsjournal
 
