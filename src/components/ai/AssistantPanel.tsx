@@ -4,7 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import type { ImageResult, StreamEvent } from "@/lib/ai/types";
 
 /* Libra AI assistant — chat panel. Streams a Claude reply over NDJSON and
-   renders any images the assistant surfaces via the search_images tool. */
+   renders any images the assistant surfaces via the search_images tool.
+
+   Optional props let it dock as a side panel inside a document workspace:
+   - getContext: returns the current note's PLAIN TEXT, sent as `context` so the
+     AI can answer about the note (XSS-safe: plain strings only; the route's
+     hardened system prompt treats it as data, not instructions — OWASP A05).
+   - onClose: renders a panel header with a close button (side-panel / sheet).
+   - focusSignal: bump it to move focus into the composer when the panel opens. */
 
 type UIMessage = {
   id: number;
@@ -20,23 +27,51 @@ const inputStyle = {
   "--tw-ring-color": "var(--color-secondary)",
 } as React.CSSProperties;
 
-const EXAMPLES = [
+const GENERAL_EXAMPLES = [
   "Draft a meeting agenda for a 30-minute project kickoff",
   "Summarize the key ideas of zero-trust security in 5 bullets",
   "Find some images of a mountain sunrise for my travel note",
 ];
 
-export default function AssistantPanel() {
+const NOTE_EXAMPLES = [
+  "Summarize this note in 3 bullet points",
+  "Suggest a clearer title for this note",
+  "Find images that fit this note",
+];
+
+export default function AssistantPanel({
+  getContext,
+  onClose,
+  focusSignal,
+  title = "Assistant",
+}: {
+  /** Returns the current document's plain text to send as context. */
+  getContext?: () => string;
+  /** When provided, the panel shows a header with a close button. */
+  onClose?: () => void;
+  /** Increment to focus the composer (e.g. when the panel is opened). */
+  focusSignal?: number;
+  title?: string;
+}) {
   const [messages, setMessages] = useState<UIMessage[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const idRef = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const hasContext = typeof getContext === "function";
+  const examples = hasContext ? NOTE_EXAMPLES : GENERAL_EXAMPLES;
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages, streaming]);
+
+  // Move focus into the composer whenever the panel is (re)opened.
+  useEffect(() => {
+    if (focusSignal) inputRef.current?.focus();
+  }, [focusSignal]);
 
   const patch = (id: number, fn: (m: UIMessage) => UIMessage) =>
     setMessages((prev) => prev.map((m) => (m.id === id ? fn(m) : m)));
@@ -52,6 +87,9 @@ export default function AssistantPanel() {
 
     // Build the API payload from the prior turns + this new user message.
     const payload = [...messages, userMsg].map((m) => ({ role: m.role, content: m.text }));
+    // Plain-text note context (optional). Trimmed; the route also clamps it.
+    const context = getContext?.().trim() ?? "";
+
     setMessages((prev) => [...prev, userMsg, assistantMsg]);
     setInput("");
     setStreaming(true);
@@ -60,7 +98,7 @@ export default function AssistantPanel() {
       const res = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: payload }),
+        body: JSON.stringify(context ? { messages: payload, context } : { messages: payload }),
       });
 
       if (!res.ok || !res.body) {
@@ -106,7 +144,43 @@ export default function AssistantPanel() {
   const isEmpty = messages.length === 0;
 
   return (
-    <div className="flex flex-col h-full">
+    <div
+      className="flex flex-col h-full"
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && onClose) onClose();
+      }}
+    >
+      {onClose && (
+        <div className="flex items-center justify-between gap-2 pb-3 mb-1">
+          <div className="flex items-center gap-2 min-w-0">
+            <h2 className="text-sm font-bold truncate" style={{ color: "var(--color-fg)" }}>
+              {title}
+            </h2>
+            {hasContext && (
+              <span
+                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                style={{
+                  background: "color-mix(in srgb, var(--color-secondary) 12%, transparent)",
+                  color: "var(--color-secondary-text)",
+                }}
+                title="The assistant can see this note's text"
+              >
+                Using this note
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close assistant"
+            className="shrink-0 flex h-7 w-7 items-center justify-center rounded-full transition-colors hover:bg-[color-mix(in_srgb,var(--color-secondary)_12%,transparent)] cursor-pointer"
+            style={{ color: "var(--color-accent)" }}
+          >
+            <CloseIcon />
+          </button>
+        </div>
+      )}
+
       {/* Transcript */}
       <div
         ref={scrollRef}
@@ -130,14 +204,15 @@ export default function AssistantPanel() {
               <SparkIcon />
             </div>
             <h2 className="text-lg font-bold mb-1" style={{ color: "var(--color-fg)" }}>
-              Ask Libra anything
+              {hasContext ? "Ask about this note" : "Ask Libra anything"}
             </h2>
             <p className="text-sm mb-6 max-w-sm" style={{ color: "var(--color-accent)" }}>
-              Draft and refine notes, summarize ideas, or pull in images — powered by
-              Claude, hardened against prompt injection.
+              {hasContext
+                ? "Summarize, rewrite, or find images for the note you're editing — powered by Claude, hardened against prompt injection."
+                : "Draft and refine notes, summarize ideas, or pull in images — powered by Claude, hardened against prompt injection."}
             </p>
             <div className="flex flex-col gap-2 w-full max-w-md">
-              {EXAMPLES.map((ex) => (
+              {examples.map((ex) => (
                 <button
                   key={ex}
                   type="button"
@@ -184,6 +259,7 @@ export default function AssistantPanel() {
         </label>
         <textarea
           id="assistant-input"
+          ref={inputRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
@@ -301,6 +377,14 @@ function SparkIcon() {
         fill="currentColor"
       />
       <path d="M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8L19 14Z" fill="currentColor" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }
