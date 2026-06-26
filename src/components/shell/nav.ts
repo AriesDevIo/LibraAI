@@ -1,0 +1,41 @@
+import type { ComponentProps, ComponentType } from "react";
+import {
+  DocumentText,
+  Widget,
+  MagicStick3,
+  Settings,
+} from "@solar-icons/react/ssr";
+
+/** All Solar icons share one props shape; type against any of them. */
+type SolarIcon = ComponentType<ComponentProps<typeof DocumentText>>;
+
+export interface NavItem {
+  href: string;
+  label: string;
+  Icon: SolarIcon;
+}
+
+/**
+ * The single source of truth for the authenticated sidebar nav. These hrefs are
+ * owned by other tabs (Canvas/Assistant/Settings) and resolve once those land —
+ * the shell links to them regardless so navigation is wired up front.
+ */
+export const NAV_ITEMS: NavItem[] = [
+  { href: "/dashboard", label: "Documents", Icon: DocumentText },
+  { href: "/dashboard/canvas", label: "Canvas", Icon: Widget },
+  { href: "/dashboard/assistant", label: "Assistant", Icon: MagicStick3 },
+  { href: "/dashboard/settings", label: "Settings", Icon: Settings },
+];
+
+/**
+ * Active-link test. "/dashboard" must match exactly (it's the index), while the
+ * deeper sections also light up for their nested routes (e.g. /dashboard/doc/x
+ * keeps "Documents" active).
+ */
+export function isActive(pathname: string, href: string): boolean {
+  if (href === "/dashboard") {
+    // Documents owns the index AND the document editor routes.
+    return pathname === "/dashboard" || pathname.startsWith("/dashboard/doc");
+  }
+  return pathname === href || pathname.startsWith(href + "/");
+}
