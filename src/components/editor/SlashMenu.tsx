@@ -1,6 +1,13 @@
 "use client";
 
-import { Text, List, GalleryMinimalistic } from "@solar-icons/react/ssr";
+import {
+  Text,
+  List,
+  GalleryMinimalistic,
+  CheckSquare,
+  Lightbulb,
+  Code,
+} from "@solar-icons/react/ssr";
 import type { BlockType, BlockTypeMeta } from "./types";
 
 /** Icon (or text glyph) for each block type, shown in the menu row. */
@@ -18,6 +25,12 @@ function TypeIcon({ meta }: { meta: BlockTypeMeta }) {
       return <List {...common} />;
     case "image":
       return <GalleryMinimalistic {...common} />;
+    case "todo":
+      return <CheckSquare {...common} />;
+    case "callout":
+      return <Lightbulb {...common} />;
+    case "code":
+      return <Code {...common} />;
     default:
       return <Text {...common} />;
   }

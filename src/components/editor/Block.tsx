@@ -8,11 +8,15 @@ import {
   GalleryMinimalistic,
   LinkMinimalistic,
   DangerTriangle,
+  Lightbulb,
 } from "@solar-icons/react/ssr";
 import {
   colorValue,
-  isSafeImageUrl,
+  fontValue,
+  sizeValue,
   isTextBlock,
+  isSafeImageUrl,
+  FONT_VALUES,
   type Block as BlockModel,
 } from "./types";
 
@@ -28,6 +32,7 @@ interface BlockProps {
   ) => void;
   onChangeText: (id: string, text: string) => void;
   onImagePatch: (id: string, patch: { src?: string; alt?: string }) => void;
+  onToggleCheck: (id: string) => void;
   onKeyDown: (id: string, e: React.KeyboardEvent) => void;
   onFocus: (id: string) => void;
   onMoveUp: (id: string) => void;
@@ -45,6 +50,10 @@ const TYPE_STYLE: Record<string, CSSProperties> = {
   paragraph: { fontSize: "1rem", fontWeight: 400, lineHeight: 1.6 },
   bulleted: { fontSize: "1rem", fontWeight: 400, lineHeight: 1.6 },
   numbered: { fontSize: "1rem", fontWeight: 400, lineHeight: 1.6 },
+  todo: { fontSize: "1rem", fontWeight: 400, lineHeight: 1.6 },
+  quote: { fontSize: "1.05rem", fontWeight: 400, lineHeight: 1.6 },
+  callout: { fontSize: "1rem", fontWeight: 400, lineHeight: 1.6 },
+  code: { fontSize: "0.9rem", fontWeight: 400, lineHeight: 1.5 },
 };
 
 const PLACEHOLDER: Record<string, string> = {
@@ -54,6 +63,10 @@ const PLACEHOLDER: Record<string, string> = {
   paragraph: "Write something, or press “/” for blocks",
   bulleted: "List item",
   numbered: "List item",
+  todo: "To-do",
+  quote: "Quote",
+  callout: "Callout",
+  code: "Code",
 };
 
 export default function Block({
@@ -64,6 +77,7 @@ export default function Block({
   registerRef,
   onChangeText,
   onImagePatch,
+  onToggleCheck,
   onKeyDown,
   onFocus,
   onMoveUp,
@@ -79,7 +93,7 @@ export default function Block({
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
-  }, [block.text, block.type, block.marks.bold, block.marks.italic]);
+  }, [block.text, block.type, block.marks]);
 
   const text = isTextBlock(block.type);
 
@@ -108,13 +122,16 @@ export default function Block({
 
       {/* Block content */}
       <div className="relative min-w-0 flex-1">
-        {text ? (
+        {block.type === "divider" ? (
+          <DividerSurface />
+        ) : text ? (
           <TextSurface
             block={block}
             listNumber={listNumber}
             textRef={textRef}
             registerRef={registerRef}
             onChangeText={onChangeText}
+            onToggleCheck={onToggleCheck}
             onKeyDown={onKeyDown}
             onFocus={onFocus}
           />
@@ -133,10 +150,7 @@ export default function Block({
 
       {/* Delete control */}
       <div className="pt-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-        <GutterButton
-          label="Delete block"
-          onClick={() => onDelete(block.id)}
-        >
+        <GutterButton label="Delete block" onClick={() => onDelete(block.id)}>
           <TrashBinMinimalistic size={14} color="currentColor" weight="Bold" />
         </GutterButton>
       </div>
@@ -172,7 +186,20 @@ function GutterButton({
   );
 }
 
-/* ── Text blocks (headings, paragraph, list items) ────────────────────────── */
+/* ── Divider ──────────────────────────────────────────────────────────────── */
+
+function DividerSurface() {
+  return (
+    <div className="py-3" aria-hidden="true">
+      <hr
+        className="border-0"
+        style={{ height: 1, background: "var(--color-surface-border)" }}
+      />
+    </div>
+  );
+}
+
+/* ── Text blocks (headings, paragraph, lists, todo, quote, callout, code) ───── */
 
 function TextSurface({
   block,
@@ -180,6 +207,7 @@ function TextSurface({
   textRef,
   registerRef,
   onChangeText,
+  onToggleCheck,
   onKeyDown,
   onFocus,
 }: {
@@ -188,61 +216,153 @@ function TextSurface({
   textRef: React.RefObject<HTMLTextAreaElement | null>;
   registerRef: BlockProps["registerRef"];
   onChangeText: BlockProps["onChangeText"];
+  onToggleCheck: BlockProps["onToggleCheck"];
   onKeyDown: BlockProps["onKeyDown"];
   onFocus: BlockProps["onFocus"];
 }) {
   const base = TYPE_STYLE[block.type] ?? TYPE_STYLE.paragraph;
+  const m = block.marks;
   const heading = block.type === "h1" || block.type === "h2" || block.type === "h3";
+  const mono = m.code || block.type === "code";
+  const checked = block.type === "todo" && !!block.checked;
 
-  // Marks layer over the per-type base. color is resolved through the
-  // whitelist so it can never be an arbitrary (injectable) CSS value.
+  // Underline + strikethrough combine into one decoration value.
+  const decos: string[] = [];
+  if (m.underline) decos.push("underline");
+  if (m.strike || checked) decos.push("line-through");
+
+  // Every value here is whitelist-resolved — never raw user CSS.
   const style: CSSProperties = {
     ...base,
-    fontWeight: block.marks.bold ? (heading ? 800 : 700) : base.fontWeight,
-    fontStyle: block.marks.italic ? "italic" : "normal",
-    color: colorValue(block.marks.color),
+    fontWeight: m.bold ? (heading ? 800 : 700) : base.fontWeight,
+    fontStyle: m.italic || block.type === "quote" ? "italic" : "normal",
+    color: colorValue(m.color),
+    fontFamily: mono ? FONT_VALUES.mono : fontValue(m.font),
+    fontSize: sizeValue(m.size) ?? base.fontSize,
+    textDecorationLine: decos.length ? decos.join(" ") : undefined,
+    opacity: checked ? 0.55 : undefined,
   };
 
-  return (
-    <div className="flex items-start gap-2">
-      {block.type === "bulleted" && (
-        <span
-          aria-hidden="true"
-          className="select-none"
-          style={{ ...base, color: "var(--color-accent)" }}
-        >
-          •
-        </span>
-      )}
-      {block.type === "numbered" && (
-        <span
-          aria-hidden="true"
-          className="select-none tabular-nums"
-          style={{ ...base, color: "var(--color-accent)" }}
-        >
-          {listNumber ?? 1}.
-        </span>
-      )}
+  const textarea = (
+    <textarea
+      ref={(el) => {
+        textRef.current = el;
+        registerRef(block.id, el);
+      }}
+      // CONTROLLED plain-text field: the value is always a string and React
+      // escapes it — typing `<script>…</script>` is shown literally, never run.
+      value={block.text}
+      rows={1}
+      spellCheck
+      placeholder={PLACEHOLDER[block.type]}
+      onChange={(e) => onChangeText(block.id, e.target.value)}
+      onKeyDown={(e) => onKeyDown(block.id, e)}
+      onFocus={() => onFocus(block.id)}
+      className="w-full resize-none overflow-hidden bg-transparent outline-none placeholder:opacity-40"
+      style={style}
+    />
+  );
 
-      <textarea
-        ref={(el) => {
-          textRef.current = el;
-          registerRef(block.id, el);
+  // Leading marker for list / todo blocks.
+  const marker =
+    block.type === "bulleted" ? (
+      <span aria-hidden="true" className="select-none" style={{ ...base, color: "var(--color-accent)" }}>
+        •
+      </span>
+    ) : block.type === "numbered" ? (
+      <span
+        aria-hidden="true"
+        className="select-none tabular-nums"
+        style={{ ...base, color: "var(--color-accent)" }}
+      >
+        {listNumber ?? 1}.
+      </span>
+    ) : block.type === "todo" ? (
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={checked}
+        aria-label={checked ? "Mark as not done" : "Mark as done"}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => onToggleCheck(block.id)}
+        className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-colors"
+        style={{
+          background: checked ? "var(--color-secondary)" : "transparent",
+          border: checked ? "none" : "1.5px solid var(--color-surface-border)",
+          color: "white",
+          fontSize: "0.8rem",
+          lineHeight: 1,
         }}
-        // CONTROLLED plain-text field: the value is always a string and React
-        // escapes it — typing `<script>…</script>` is shown literally, never run.
-        value={block.text}
-        rows={1}
-        spellCheck
-        placeholder={PLACEHOLDER[block.type]}
-        onChange={(e) => onChangeText(block.id, e.target.value)}
-        onKeyDown={(e) => onKeyDown(block.id, e)}
-        onFocus={() => onFocus(block.id)}
-        className="w-full resize-none overflow-hidden bg-transparent outline-none placeholder:opacity-40"
-        style={style}
-      />
+      >
+        {checked ? "✓" : null}
+      </button>
+    ) : null;
+
+  const row = (
+    <div className="flex items-start gap-2">
+      {marker}
+      {textarea}
     </div>
   );
+
+  // Container styling for quote / callout / code.
+  if (block.type === "quote") {
+    return (
+      <div
+        className="my-1 rounded-r-lg py-1 pl-3.5"
+        style={{ borderLeft: "3px solid var(--color-secondary)" }}
+      >
+        {row}
+      </div>
+    );
+  }
+
+  if (block.type === "callout") {
+    const accent =
+      m.color === "default" ? "var(--color-secondary)" : colorValue(m.color);
+    return (
+      <div
+        className="my-1 flex items-start gap-2.5 rounded-xl px-3.5 py-3"
+        style={{
+          background: `color-mix(in srgb, ${accent} 10%, var(--color-bg))`,
+          border: `1px solid color-mix(in srgb, ${accent} 28%, transparent)`,
+        }}
+      >
+        <span className="mt-0.5 shrink-0" aria-hidden="true">
+          <Lightbulb size={18} color={accent} weight="Bold" />
+        </span>
+        <div className="min-w-0 flex-1">{textarea}</div>
+      </div>
+    );
+  }
+
+  if (block.type === "code") {
+    return (
+      <pre
+        className="my-1 overflow-x-auto rounded-xl px-3.5 py-3"
+        style={{
+          background: "color-mix(in srgb, var(--color-fg) 6%, var(--color-bg))",
+          border: "1px solid var(--color-surface-border)",
+        }}
+      >
+        {textarea}
+      </pre>
+    );
+  }
+
+  // Inline-code mark on a normal block gets a faint tinted strip.
+  if (m.code) {
+    return (
+      <div
+        className="my-0.5 rounded-md px-2 py-1"
+        style={{ background: "color-mix(in srgb, var(--color-fg) 6%, transparent)" }}
+      >
+        {row}
+      </div>
+    );
+  }
+
+  return row;
 }
 
 /* ── Image blocks (image by URL) ──────────────────────────────────────────── */
@@ -282,11 +402,7 @@ function ImageSurface({
             border: "1px dashed var(--color-surface-border)",
           }}
         >
-          <GalleryMinimalistic
-            size={26}
-            color="var(--color-accent)"
-            weight="Bold"
-          />
+          <GalleryMinimalistic size={26} color="var(--color-accent)" weight="Bold" />
           <span className="text-sm" style={{ color: "var(--color-accent)" }}>
             Paste an image URL below
           </span>
@@ -294,7 +410,8 @@ function ImageSurface({
       )}
 
       {/* URL field */}
-      <label className="flex items-center gap-2 rounded-lg px-2.5 py-1.5"
+      <label
+        className="flex items-center gap-2 rounded-lg px-2.5 py-1.5"
         style={{
           background: "var(--color-surface)",
           border: "1px solid var(--color-surface-border)",

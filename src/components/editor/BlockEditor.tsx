@@ -14,12 +14,16 @@ import Toolbar from "./Toolbar";
 import {
   createBlock,
   filterBlockTypes,
-  isListBlock,
+  isListLike,
+  isMultilineBlock,
   isTextBlock,
   reserveIds,
   type Block as BlockModel,
   type BlockType,
   type ColorKey,
+  type FontKey,
+  type SizeKey,
+  type ToggleMark,
   DEFAULT_MARKS,
 } from "./types";
 
@@ -207,6 +211,23 @@ export default function BlockEditor({
   const selectSlashType = (type: BlockType) => {
     const target = slash?.blockId;
     if (!target) return;
+    // Divider is non-text: convert in place, then drop a paragraph after it so
+    // the caret has somewhere to land.
+    if (type === "divider") {
+      const para = createBlock("paragraph");
+      setBlocks((bs) => {
+        const i = bs.findIndex((b) => b.id === target);
+        if (i < 0) return bs;
+        const copy = bs.slice();
+        copy[i] = { ...copy[i], type: "divider", text: "" };
+        copy.splice(i + 1, 0, para);
+        return copy;
+      });
+      setSlash(null);
+      setActiveId(para.id);
+      pendingFocus.current = { id: para.id, caret: "start" };
+      return;
+    }
     setBlocks((bs) =>
       bs.map((b) =>
         b.id === target
@@ -227,7 +248,7 @@ export default function BlockEditor({
 
   /* ── Formatting (acts on the active block) ──────────────────────────────── */
 
-  const toggleMark = (key: "bold" | "italic") => {
+  const toggleMark = (key: ToggleMark) => {
     if (!activeId) return;
     setBlocks((bs) =>
       bs.map((b) =>
@@ -246,6 +267,35 @@ export default function BlockEditor({
           ? { ...b, marks: { ...b.marks, color } }
           : b,
       ),
+    );
+  };
+
+  const setFont = (font: FontKey) => {
+    if (!activeId) return;
+    setBlocks((bs) =>
+      bs.map((b) =>
+        b.id === activeId && isTextBlock(b.type)
+          ? { ...b, marks: { ...b.marks, font } }
+          : b,
+      ),
+    );
+  };
+
+  const setSize = (size: SizeKey) => {
+    if (!activeId) return;
+    setBlocks((bs) =>
+      bs.map((b) =>
+        b.id === activeId && isTextBlock(b.type)
+          ? { ...b, marks: { ...b.marks, size } }
+          : b,
+      ),
+    );
+  };
+
+  /** Toggle a to-do block's checked state. */
+  const toggleCheck = (id: string) => {
+    setBlocks((bs) =>
+      bs.map((b) => (b.id === id ? { ...b, checked: !b.checked } : b)),
     );
   };
 
@@ -308,20 +358,28 @@ export default function BlockEditor({
       return;
     }
 
+    // Multi-line blocks (code / quote / callout): a bare Enter inserts a newline
+    // INSIDE the block rather than splitting it.
+    if (e.key === "Enter" && !e.shiftKey && isMultilineBlock(block.type)) {
+      return; // let the textarea insert the newline natively
+    }
+
     // Enter splits the block at the caret (Shift+Enter = soft newline).
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       const before = value.slice(0, start);
       const after = value.slice(end);
-      // Enter on an empty list item exits the list.
-      if (isListBlock(block.type) && value.trim() === "") {
+      // Enter on an empty list-like item exits to a paragraph.
+      if (isListLike(block.type) && value.trim() === "") {
         setBlocks((bs) =>
-          bs.map((b) => (b.id === id ? { ...b, type: "paragraph" } : b)),
+          bs.map((b) =>
+            b.id === id ? { ...b, type: "paragraph", checked: undefined } : b,
+          ),
         );
         pendingFocus.current = { id, caret: "start" };
         return;
       }
-      const newType: BlockType = isListBlock(block.type)
+      const newType: BlockType = isListLike(block.type)
         ? block.type
         : "paragraph";
       const newBlock = createBlock(newType, {
@@ -342,10 +400,12 @@ export default function BlockEditor({
     // Backspace at the very start: unwrap, then merge.
     if (e.key === "Backspace" && collapsed && start === 0) {
       if (block.type !== "paragraph") {
-        // Headings / list items first collapse back to a paragraph.
+        // Headings / list / quote / callout / code first collapse to a paragraph.
         e.preventDefault();
         setBlocks((bs) =>
-          bs.map((b) => (b.id === id ? { ...b, type: "paragraph" } : b)),
+          bs.map((b) =>
+            b.id === id ? { ...b, type: "paragraph", checked: undefined } : b,
+          ),
         );
         pendingFocus.current = { id, caret: "start" };
         return;
@@ -427,7 +487,12 @@ export default function BlockEditor({
           disabled={!activeIsText}
           onToggleBold={() => toggleMark("bold")}
           onToggleItalic={() => toggleMark("italic")}
+          onToggleUnderline={() => toggleMark("underline")}
+          onToggleStrike={() => toggleMark("strike")}
+          onToggleCode={() => toggleMark("code")}
           onSetColor={setColor}
+          onSetFont={setFont}
+          onSetSize={setSize}
         />
       </div>
 
@@ -442,6 +507,7 @@ export default function BlockEditor({
             registerRef={registerRef}
             onChangeText={handleChangeText}
             onImagePatch={handleImagePatch}
+            onToggleCheck={toggleCheck}
             onKeyDown={handleKeyDown}
             onFocus={handleFocus}
             onMoveUp={(id) => moveBlock(id, -1)}

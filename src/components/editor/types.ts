@@ -7,8 +7,10 @@
  *    of which React escapes — so a payload like `<script>alert('XSS')</script>`
  *    shows up verbatim and never executes. We never call dangerouslySetInnerHTML
  *    on user content.
- *  - Formatting (bold / italic / color) is stored as a small, closed set of
- *    flags and color KEYS — not as markup — so styling can never carry script.
+ *  - ALL formatting (bold/italic/underline/strike/code, color, font family, font
+ *    size) is stored as a small, CLOSED SET of flags and KEYS — never raw CSS —
+ *    and every key is resolved through a whitelist with a safe fallback, so a
+ *    tampered block can never inject a CSS/script value.
  *  - Image URLs are validated to http(s) only (see isSafeImageUrl) to block
  *    `javascript:` / `data:` URL injection.
  */
@@ -20,6 +22,11 @@ export type BlockType =
   | "paragraph"
   | "bulleted"
   | "numbered"
+  | "todo"
+  | "quote"
+  | "callout"
+  | "code"
+  | "divider"
   | "image";
 
 /** Closed set of text-color choices. The block only ever stores one of these
@@ -34,10 +41,22 @@ export type ColorKey =
   | "teal"
   | "blue";
 
+/** Closed set of font families. Keys map to fixed, known-safe font stacks. */
+export type FontKey = "default" | "serif" | "mono";
+
+/** Closed set of font sizes. "default" keeps the per-block-type base size. */
+export type SizeKey = "default" | "sm" | "lg" | "xl";
+
 export interface TextMarks {
   bold: boolean;
   italic: boolean;
+  underline: boolean;
+  strike: boolean;
+  /** Inline monospace ("code") styling for the whole block's text. */
+  code: boolean;
   color: ColorKey;
+  font: FontKey;
+  size: SizeKey;
 }
 
 export interface Block {
@@ -46,6 +65,8 @@ export interface Block {
   /** Plain text content. Always rendered escaped (text node / textarea value). */
   text: string;
   marks: TextMarks;
+  /** To-do blocks only: whether the item is checked. */
+  checked?: boolean;
   /** Image blocks only: a validated http(s) URL (see isSafeImageUrl). */
   src?: string;
   /** Image blocks only: alt text (plain string, also escaped on render). */
@@ -55,14 +76,21 @@ export interface Block {
 export const DEFAULT_MARKS: TextMarks = {
   bold: false,
   italic: false,
+  underline: false,
+  strike: false,
+  code: false,
   color: "default",
+  font: "default",
+  size: "default",
 };
+
+/** Boolean (toggle) marks — drives the toolbar + the keyboard shortcuts. */
+export type ToggleMark = "bold" | "italic" | "underline" | "strike" | "code";
 
 /**
  * Whitelist mapping every ColorKey to a known-safe CSS value. Lookups always
  * go through this table, and `colorValue()` falls back to the theme foreground
  * for any unexpected key — so even a tampered block can't inject CSS.
- * Brand colors first; theme-aware tokens where possible.
  */
 export const COLOR_VALUES: Record<ColorKey, string> = {
   default: "var(--color-fg)",
@@ -91,11 +119,59 @@ export const COLOR_SWATCHES: { key: ColorKey; label: string }[] = [
   { key: "blue", label: "Blue" },
 ];
 
-export const isTextBlock = (type: BlockType): boolean => type !== "image";
+/** Whitelist of fixed font stacks. Values are static (never user input). */
+export const FONT_VALUES: Record<FontKey, string | undefined> = {
+  default: undefined, // inherit the app sans (Poppins)
+  serif: 'Georgia, Cambria, "Times New Roman", Times, serif',
+  mono: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+};
 
-/** Block kinds that share a list type when you press Enter. */
+export function fontValue(key: FontKey): string | undefined {
+  return key in FONT_VALUES ? FONT_VALUES[key] : undefined;
+}
+
+export const FONT_OPTIONS: { key: FontKey; label: string }[] = [
+  { key: "default", label: "Sans" },
+  { key: "serif", label: "Serif" },
+  { key: "mono", label: "Mono" },
+];
+
+/** Whitelist of font sizes. "default" lets the per-type base size win. */
+export const SIZE_VALUES: Record<SizeKey, string | undefined> = {
+  default: undefined,
+  sm: "0.875rem",
+  lg: "1.25rem",
+  xl: "1.5rem",
+};
+
+export function sizeValue(key: SizeKey): string | undefined {
+  return key in SIZE_VALUES ? SIZE_VALUES[key] : undefined;
+}
+
+export const SIZE_OPTIONS: { key: SizeKey; label: string }[] = [
+  { key: "default", label: "Default" },
+  { key: "sm", label: "Small" },
+  { key: "lg", label: "Large" },
+  { key: "xl", label: "X-Large" },
+];
+
+/** Text blocks accept a caret + text formatting. Divider/image do not. */
+export const isTextBlock = (type: BlockType): boolean =>
+  type !== "image" && type !== "divider";
+
+/** Block kinds that render a leading marker and renumber as a run. */
 export const isListBlock = (type: BlockType): boolean =>
   type === "bulleted" || type === "numbered";
+
+/** "List-like" blocks: pressing Enter continues the same type, and Enter on an
+ *  empty one exits to a paragraph. */
+export const isListLike = (type: BlockType): boolean =>
+  type === "bulleted" || type === "numbered" || type === "todo";
+
+/** Blocks where a bare Enter inserts a newline INSIDE the block (multi-line)
+ *  instead of splitting into a new block. */
+export const isMultilineBlock = (type: BlockType): boolean =>
+  type === "quote" || type === "callout" || type === "code";
 
 /** Static metadata for the slash menu (icons are attached in the component so
  *  this module stays free of JSX). `keywords` drive fuzzy filtering. */
@@ -150,10 +226,42 @@ export const BLOCK_TYPES: BlockTypeMeta[] = [
     keywords: ["number", "ordered", "list", "ol", "steps"],
   },
   {
+    type: "todo",
+    label: "To-do list",
+    description: "A checkbox you can tick off.",
+    keywords: ["todo", "task", "checkbox", "check", "done"],
+  },
+  {
+    type: "quote",
+    label: "Quote",
+    description: "A quoted passage with a side bar.",
+    glyph: "“",
+    keywords: ["quote", "blockquote", "cite", "callout"],
+  },
+  {
+    type: "callout",
+    label: "Callout",
+    description: "Highlighted box for tips or notes.",
+    keywords: ["callout", "note", "tip", "info", "warning", "box"],
+  },
+  {
+    type: "code",
+    label: "Code",
+    description: "Monospaced code block.",
+    keywords: ["code", "snippet", "monospace", "pre"],
+  },
+  {
+    type: "divider",
+    label: "Divider",
+    description: "A horizontal separator line.",
+    glyph: "—",
+    keywords: ["divider", "separator", "rule", "hr", "line"],
+  },
+  {
     type: "image",
     label: "Image",
-    description: "Embed an image by URL.",
-    keywords: ["image", "picture", "photo", "img", "media", "url"],
+    description: "Embed an image by URL or upload.",
+    keywords: ["image", "picture", "photo", "img", "media", "url", "upload"],
   },
 ];
 
