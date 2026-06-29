@@ -1,14 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import AssistantPanel from "@/components/ai/AssistantPanel";
 
-/* Libra home hero — Aries-style prompt box, violet palette. The user types a
-   request; we hand it off to the assistant (which can create documents) and
-   navigate there. Mirrors AriesAI's HomePrompt handoff pattern. */
-
-/** sessionStorage bridge → the assistant page reads & clears this on mount. */
-export const HOME_PROMPT_KEY = "libra:home:prompt";
+/* Libra home hero — Aries-style prompt box, violet palette. Submitting starts
+   the assistant INLINE (no redirect) with the prompt already running, so the
+   AI begins immediately. */
 
 const PLACEHOLDERS = [
   "Ask Libra to draft a meeting agenda…",
@@ -31,8 +28,8 @@ const HOLD_MS = 1600;
 
 export function HomePrompt({ firstName }: { firstName: string }) {
   const [value, setValue] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const router = useRouter();
+  // The submitted prompt → switches this hero into the live chat. null = hero.
+  const [started, setStarted] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Cycling placeholder typewriter.
@@ -41,7 +38,7 @@ export function HomePrompt({ firstName }: { firstName: string }) {
   const [phase, setPhase] = useState<"typing" | "holding" | "deleting">("typing");
 
   useEffect(() => {
-    if (value || submitting) return;
+    if (value || started !== null) return;
     const current = PLACEHOLDERS[phraseIndex];
     // Every transition runs in a timeout callback (never a synchronous setState
     // in the effect body) — the re-render then re-enters with the next phase.
@@ -62,28 +59,45 @@ export function HomePrompt({ firstName }: { firstName: string }) {
       }, DELETE_MS);
     }
     return () => clearTimeout(t);
-  }, [placeholder, phase, phraseIndex, value, submitting]);
+  }, [placeholder, phase, phraseIndex, value, started]);
 
   // Auto-grow textarea up to ~6 lines.
   useEffect(() => {
+    if (started !== null) return;
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
-  }, [value]);
+  }, [value, started]);
 
   function submit(text: string) {
     const prompt = text.trim();
-    if (!prompt || submitting) return;
-    setSubmitting(true);
-    try {
-      window.sessionStorage.setItem(HOME_PROMPT_KEY, prompt);
-    } catch {
-      /* sessionStorage may be unavailable — the assistant just starts blank */
-    }
-    router.push("/dashboard/assistant");
+    if (!prompt) return;
+    setStarted(prompt);
   }
 
+  // ── Live chat (started) ──────────────────────────────────────────────
+  if (started !== null) {
+    return (
+      <div className="mx-auto w-full max-w-2xl px-4">
+        <div
+          className="flex h-[min(72vh,640px)] flex-col rounded-2xl p-3 shadow-2xl sm:p-4"
+          style={{ background: "var(--color-bg)", border: "1px solid var(--color-surface-border)" }}
+        >
+          <AssistantPanel
+            title="Libra AI"
+            initialPrompt={started}
+            onClose={() => {
+              setStarted(null);
+              setValue("");
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // ── Hero prompt ──────────────────────────────────────────────────────
   return (
     <div
       className="relative mx-auto flex w-full max-w-3xl flex-col items-center px-6 text-center"
@@ -122,33 +136,25 @@ export function HomePrompt({ firstName }: { firstName: string }) {
               }
             }}
             placeholder={value ? "" : placeholder}
-            disabled={submitting}
             rows={1}
             maxLength={2000}
             aria-label="Describe the note you want Libra to write"
-            className="flex-1 resize-none bg-transparent px-2 py-2 text-sm leading-relaxed outline-none disabled:opacity-60 sm:text-base"
+            className="flex-1 resize-none bg-transparent px-2 py-2 text-sm leading-relaxed outline-none sm:text-base"
             style={{ color: "var(--color-on-primary)", minHeight: "2.5rem", maxHeight: "180px" }}
           />
           <button
             type="submit"
-            disabled={submitting || !value.trim()}
+            disabled={!value.trim()}
             aria-label="Ask Libra"
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
             style={{ background: "var(--color-secondary)" }}
           >
-            {submitting ? (
-              <span
-                className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
-                aria-hidden="true"
-              />
-            ) : (
-              <ArrowIcon />
-            )}
+            <ArrowIcon />
           </button>
         </div>
       </form>
 
-      {/* Suggestion chips */}
+      {/* Suggestion chips — start the chat immediately */}
       <div
         className="mt-7 grid w-full max-w-2xl grid-cols-2 gap-2.5 sm:grid-cols-4"
         style={{ animation: "libra-fade-up 0.6s cubic-bezier(0.16,1,0.3,1) 0.25s both" }}
@@ -157,12 +163,8 @@ export function HomePrompt({ firstName }: { firstName: string }) {
           <button
             key={s.label}
             type="button"
-            onClick={() => {
-              setValue(s.prompt);
-              textareaRef.current?.focus();
-            }}
-            disabled={submitting}
-            className="flex items-center justify-center gap-1.5 rounded-xl px-3 py-3 text-center transition-opacity duration-200 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={() => submit(s.prompt)}
+            className="flex items-center justify-center gap-1.5 rounded-xl px-3 py-3 text-center transition-opacity duration-200 hover:opacity-90"
             style={{
               background: "rgba(255,255,255,0.08)",
               border: "1px solid rgba(255,255,255,0.16)",

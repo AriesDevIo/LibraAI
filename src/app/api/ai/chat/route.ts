@@ -5,8 +5,8 @@ import { CLAUDE_MODEL, MAX_TURNS, subscriptionEnv } from "@/lib/ai/config";
 import { SYSTEM_PROMPT } from "@/lib/ai/system-prompt";
 import { searchImages } from "@/lib/ai/images";
 import { checkRateLimit } from "@/lib/ai/rate-limit";
-import type { ChatMessage, StreamEvent } from "@/lib/ai/types";
-import { createBlock, type Block, type BlockType } from "@/components/editor/types";
+import type { ChatMessage, StreamEvent, ImageResult } from "@/lib/ai/types";
+import { createBlock, DEFAULT_MARKS, type Block } from "@/components/editor/types";
 
 // The Agent SDK spawns the Claude Code subprocess; force a dynamic Node runtime.
 export const runtime = "nodejs";
@@ -19,7 +19,6 @@ const MAX_CONTENT_CHARS = 8000;
 const MAX_CONTEXT_CHARS = 6000;
 // Bounds for AI-created documents.
 const MAX_DOC_TITLE = 200;
-const MAX_DOC_CONTENT = 20_000;
 const MAX_DOC_BLOCKS = 300;
 // Abort if the agent goes silent (dead/stuck subprocess) so the stream closes.
 const INACTIVITY_TIMEOUT_MS = 120_000;
@@ -36,29 +35,116 @@ function stripInline(s: string): string {
     .trim();
 }
 
-/** Convert Markdown into the editor's Block[] model so an AI-created document
- *  opens as real headings / lists / paragraphs. Text fields are plain strings. */
-function markdownToBlocks(md: string): Block[] {
-  const blocks: Block[] = [];
-  const push = (type: BlockType, text: string) => {
-    if (blocks.length >= MAX_DOC_BLOCKS) return;
-    blocks.push(createBlock(type, { text }));
-  };
+// Block types the assistant may emit when composing a document. Mirrors the
+// editor's model; unknown values are rejected by the zod enum below.
+const DOC_BLOCK_TYPES = [
+  "h1", "h2", "h3", "paragraph", "bulleted", "numbered",
+  "todo", "quote", "callout", "code", "divider", "icon", "image",
+] as const;
 
-  for (const raw of md.replace(/\r\n/g, "\n").split("\n")) {
-    const line = raw.trim();
-    if (!line) continue;
-    let m: RegExpExecArray | null;
-    if ((m = /^###\s+(.*)/.exec(line))) push("h3", stripInline(m[1]));
-    else if ((m = /^##\s+(.*)/.exec(line))) push("h2", stripInline(m[1]));
-    else if ((m = /^#\s+(.*)/.exec(line))) push("h1", stripInline(m[1]));
-    else if ((m = /^[-*+]\s+(.*)/.exec(line))) push("bulleted", stripInline(m[1]));
-    else if ((m = /^\d+[.)]\s+(.*)/.exec(line))) push("numbered", stripInline(m[1]));
-    else push("paragraph", stripInline(line));
+// Curated icon keys the assistant may use — all exist in the editor's icon
+// registry (unknown keys render nothing, so this is guidance + a guard).
+const ICON_ALLOWLIST = new Set([
+  "Lightbulb", "Rocket", "Target", "Star", "Shield", "ShieldCheck", "Fire",
+  "Crown", "CheckCircle", "Flag", "Bookmark", "Calendar", "CalendarMark", "Pen",
+  "Folder", "Bolt", "Heart", "Sun", "Moon", "Leaf", "Code", "Bug", "MedalStar",
+  "Confetti", "MapPoint", "ClockCircle", "InfoCircle", "DangerTriangle",
+  "MagicStick3", "Notes", "ChartSquare", "GraphUp", "Cart", "Wallet", "Gift",
+  "CupHot", "Football", "Dumbbell",
+]);
+
+/** One block of an AI-authored document (the create_document tool input). */
+type BlockSpec = {
+  type: (typeof DOC_BLOCK_TYPES)[number];
+  text?: string;
+  color?: "default" | "violet" | "purple" | "orchid" | "rose" | "amber" | "teal" | "blue";
+  bold?: boolean;
+  italic?: boolean;
+  checked?: boolean;
+  icon?: string;
+  imageQuery?: string;
+};
+
+/**
+ * Turn the assistant's structured block specs into the editor's Block[] model,
+ * using the FULL feature set: headings, lists, todos, quotes, callouts, code,
+ * dividers, colored/bold/italic text, icons, and embedded images.
+ *
+ * Images are RESOLVED here via searchImages (validated http(s) URLs only) — so
+ * photos actually land in the document. Colors/icons go through closed-set
+ * whitelists, and all text is plain strings (XSS-safe — OWASP A05).
+ */
+async function specsToBlocks(
+  specs: BlockSpec[],
+  onImage: (img: ImageResult) => void,
+): Promise<Block[]> {
+  const blocks: Block[] = [];
+  for (const b of specs.slice(0, MAX_DOC_BLOCKS)) {
+    if (blocks.length >= MAX_DOC_BLOCKS) break;
+
+    if (b.type === "image") {
+      const q = (b.imageQuery || b.text || "").trim();
+      if (!q) continue;
+      const [img] = await searchImages(q, 1);
+      if (img) {
+        blocks.push(createBlock("image", { src: img.url, alt: img.title || q }));
+        onImage(img);
+      }
+      continue;
+    }
+    if (b.type === "divider") {
+      blocks.push(createBlock("divider"));
+      continue;
+    }
+    if (b.type === "icon") {
+      const key = (b.icon || "").trim();
+      if (ICON_ALLOWLIST.has(key)) blocks.push(createBlock("icon", { icon: key, iconSize: "md" }));
+      continue;
+    }
+
+    const text = stripInline((b.text || "").trim());
+    if (!text) continue;
+    const overrides: Partial<Block> = {
+      text,
+      marks: {
+        ...DEFAULT_MARKS,
+        bold: !!b.bold,
+        italic: !!b.italic,
+        color: b.color ?? "default",
+      },
+    };
+    if (b.type === "todo") overrides.checked = !!b.checked;
+    blocks.push(createBlock(b.type, overrides));
   }
-  if (blocks.length === 0) push("paragraph", "");
   return blocks;
 }
+
+// Shared zod schema for one document block — used by create_document (new doc)
+// and add_to_document (insert into the open doc).
+const blockSpecSchema = z.object({
+  type: z
+    .enum(DOC_BLOCK_TYPES)
+    .describe(
+      "Block kind: h1/h2/h3 headings; paragraph; bulleted/numbered/todo lists; " +
+        "quote; callout (highlighted tip box); code; divider (separator); icon; image.",
+    ),
+  text: z.string().optional().describe("Text for text blocks (omit for divider/icon/image)."),
+  color: z
+    .enum(["default", "violet", "purple", "orchid", "rose", "amber", "teal", "blue"])
+    .optional()
+    .describe("Optional text color for emphasis."),
+  bold: z.boolean().optional(),
+  italic: z.boolean().optional(),
+  checked: z.boolean().optional().describe("For 'todo' blocks: whether it's ticked."),
+  icon: z
+    .string()
+    .optional()
+    .describe("For 'icon' blocks: a name like 'Lightbulb', 'Rocket', 'Star', 'Shield', 'Target'."),
+  imageQuery: z
+    .string()
+    .optional()
+    .describe("For 'image' blocks: a short search query; a real licensed photo is embedded."),
+});
 
 /** Validate + clamp the untrusted request body into a clean transcript. */
 function sanitizeMessages(input: unknown): ChatMessage[] {
@@ -138,6 +224,12 @@ export async function POST(req: Request) {
   const context =
     typeof rawContext === "string" ? rawContext.trim().slice(0, MAX_CONTEXT_CHARS) : "";
 
+  // When the assistant is open INSIDE a document, the client sends its id. Its
+  // presence enables the add_to_document tool (the client applies the result &
+  // saves via RLS, so the server only needs to know the tool is relevant here).
+  const rawDocId = (body as { docId?: unknown })?.docId;
+  const inDocument = typeof rawDocId === "string" && rawDocId.length > 0 && rawDocId.length < 100;
+
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
@@ -179,24 +271,35 @@ export async function POST(req: Request) {
             },
           ),
           // Create a real document in the signed-in user's workspace. The insert
-          // is RLS-scoped to `user.id`, and the body is parsed into the editor's
-          // plain-text block model (XSS-safe) — see markdownToBlocks.
+          // is RLS-scoped to `user.id`. The body is a structured block list so
+          // the doc uses Libra's FULL feature set — headings, lists, todos,
+          // quotes, callouts, code, dividers, colored/bold text, icons, and
+          // EMBEDDED images (resolved + validated here). XSS-safe (plain text).
           tool(
             "create_document",
-            "Create and save a new note/document in the user's Libra workspace. Use this when " +
-              "the user asks to create, draft, write, or start a note or document. Give a short " +
-              "title and the body as Markdown (use #/##/### headings, '- ' bullets, '1.' lists, " +
-              "**bold**). The document is saved privately to the user's account.",
+            "Create and save a new note/document in the user's Libra workspace. Use this whenever " +
+              "the user asks to create, draft, write, or start a note or document. Build a RICH " +
+              "document with the `blocks` array — use headings, bullet/numbered/todo lists, quotes " +
+              "and callouts, colored or bold text for emphasis, relevant icons, and EMBED images " +
+              "(add image blocks with an imageQuery — the app finds and inserts a real photo). " +
+              "Saved privately to the user's account.",
             {
-              title: z.string().describe("Short document title, e.g. 'Weekly meeting agenda'"),
-              content: z.string().describe("The document body as Markdown."),
+              title: z.string().describe("Short document title, e.g. 'Weekend in Kyoto'"),
+              blocks: z
+                .array(blockSpecSchema)
+                .describe("The document content as an ordered list of blocks. Make it visually rich."),
             },
-            async ({ title, content }) => {
+            async ({ title, blocks }) => {
               const cleanTitle = (title || "Untitled").trim().slice(0, MAX_DOC_TITLE) || "Untitled";
-              const blocks = markdownToBlocks((content || "").slice(0, MAX_DOC_CONTENT));
+              const embedded: ImageResult[] = [];
+              const docBlocks = await specsToBlocks(
+                (blocks ?? []) as BlockSpec[],
+                (img) => embedded.push(img),
+              );
+              if (docBlocks.length === 0) docBlocks.push(createBlock("paragraph", { text: "" }));
               const { data, error } = await supabase
                 .from("documents")
-                .insert({ user_id: user.id, title: cleanTitle, content: blocks })
+                .insert({ user_id: user.id, title: cleanTitle, content: docBlocks })
                 .select("id")
                 .single();
               if (error || !data) {
@@ -209,14 +312,61 @@ export async function POST(req: Request) {
                   ],
                 };
               }
+              // Show the embedded photos in the chat too, then the Open card.
+              if (embedded.length > 0) send({ type: "images", query: cleanTitle, images: embedded });
               send({ type: "document", id: data.id as string, title: cleanTitle });
               return {
                 content: [
                   {
                     type: "text" as const,
                     text:
-                      `Created the document "${cleanTitle}" (${blocks.length} block(s)). It's saved and ` +
-                      "shown to the user with an Open button — briefly confirm it's ready.",
+                      `Created "${cleanTitle}" with ${docBlocks.length} block(s)` +
+                      (embedded.length ? ` and ${embedded.length} embedded image(s)` : "") +
+                      ". It's saved and shown with an Open button — briefly confirm it's ready.",
+                  },
+                ],
+              };
+            },
+          ),
+          // Insert content into the document the user is CURRENTLY editing. We
+          // build + resolve the blocks here, then STREAM them to the client,
+          // which merges them into the open editor and saves via RLS — the
+          // server never writes the doc directly (no autosave race). Only
+          // reachable when the request comes from inside a document (allowedTools).
+          tool(
+            "add_to_document",
+            "Insert content into the document the user is CURRENTLY editing. Use this when they ask " +
+              "to add, insert, append, or put something — text, a section, a list, or images — into " +
+              "this note (NOT a new document). Provide a `blocks` array in the same rich format as " +
+              "create_document; the blocks are appended to the open document.",
+            {
+              blocks: z
+                .array(blockSpecSchema)
+                .describe("Ordered blocks to append to the document the user is editing."),
+            },
+            async ({ blocks }) => {
+              const embedded: ImageResult[] = [];
+              const docBlocks = await specsToBlocks(
+                (blocks ?? []) as BlockSpec[],
+                (img) => embedded.push(img),
+              );
+              if (docBlocks.length === 0) {
+                return {
+                  content: [
+                    { type: "text" as const, text: "Nothing to add — provide at least one block." },
+                  ],
+                };
+              }
+              if (embedded.length > 0) send({ type: "images", query: "added to your note", images: embedded });
+              send({ type: "append", blocks: docBlocks });
+              return {
+                content: [
+                  {
+                    type: "text" as const,
+                    text:
+                      `Added ${docBlocks.length} block(s)` +
+                      (embedded.length ? ` with ${embedded.length} image(s)` : "") +
+                      " to the document the user is editing — briefly confirm.",
                   },
                 ],
               };
@@ -249,7 +399,9 @@ export async function POST(req: Request) {
             effort: "low", // snappy chat replies; the prompt is prescriptive
             maxTurns: MAX_TURNS,
             mcpServers: { libra: imageServer },
-            allowedTools: ["mcp__libra__search_images", "mcp__libra__create_document"],
+            allowedTools: inDocument
+              ? ["mcp__libra__search_images", "mcp__libra__create_document", "mcp__libra__add_to_document"]
+              : ["mcp__libra__search_images", "mcp__libra__create_document"],
             // SECURITY: disable every built-in tool (Bash/Read/Write/WebFetch/…)
             // so a prompt-injected message can't run shell commands, read host
             // files like .env, or exfiltrate data. Only the image tool above is

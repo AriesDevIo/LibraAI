@@ -23,7 +23,7 @@ export default function DashboardAssistantPage() {
           border: "1px solid var(--color-surface-border)",
         }}
       >
-        <AssistantPanel handoffKey="libra:home:prompt" />
+        <AssistantPanel />
       </div>
     </div>
   );

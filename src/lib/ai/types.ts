@@ -1,6 +1,8 @@
 // Shared types for Libra's AI assistant — imported by both the API route
 // (server) and the chat panel (client). Type-only, so safe on either side.
 
+import type { Block } from "@/components/editor/types";
+
 /** One turn in the chat transcript sent from the client to the API route. */
 export type ChatRole = "user" | "assistant";
 
@@ -28,5 +30,9 @@ export type StreamEvent =
   | { type: "text"; text: string }
   | { type: "images"; query: string; images: ImageResult[] }
   | { type: "document"; id: string; title: string }
+  // Blocks to append to the document the user is currently editing. The client
+  // merges them into the open editor and saves (the server never writes the doc
+  // directly — that avoids racing the editor's autosave).
+  | { type: "append"; blocks: Block[] }
   | { type: "error"; error: string }
   | { type: "done" };

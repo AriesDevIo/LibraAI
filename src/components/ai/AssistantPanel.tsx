@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ImageResult, StreamEvent } from "@/lib/ai/types";
+import type { Block } from "@/components/editor/types";
 import { renderMarkdown } from "./markdown";
 
 type CreatedDoc = { id: string; title: string };
@@ -50,7 +51,9 @@ export default function AssistantPanel({
   onClose,
   focusSignal,
   title = "Assistant",
-  handoffKey,
+  initialPrompt,
+  docId,
+  onAppendBlocks,
 }: {
   /** Returns the current document's plain text to send as context. */
   getContext?: () => string;
@@ -59,8 +62,12 @@ export default function AssistantPanel({
   /** Increment to focus the composer (e.g. when the panel is opened). */
   focusSignal?: number;
   title?: string;
-  /** sessionStorage key holding a prompt to auto-send once on mount (home hero). */
-  handoffKey?: string;
+  /** A prompt to auto-send once on mount (e.g. submitted from the home hero). */
+  initialPrompt?: string;
+  /** The open document's id — enables the assistant to insert into THIS note. */
+  docId?: string;
+  /** Called with blocks the assistant wants appended to the open document. */
+  onAppendBlocks?: (blocks: Block[]) => void;
 }) {
   const [messages, setMessages] = useState<UIMessage[]>([]);
   const [input, setInput] = useState("");
@@ -83,21 +90,16 @@ export default function AssistantPanel({
     if (focusSignal) inputRef.current?.focus();
   }, [focusSignal]);
 
-  // Auto-send a prompt handed off from the home hero (read + clear, once).
-  const didHandoff = useRef(false);
+  // Auto-send an initial prompt (e.g. submitted from the home hero), once.
+  const didInit = useRef(false);
   useEffect(() => {
-    if (didHandoff.current || !handoffKey) return;
-    didHandoff.current = true;
-    let prompt = "";
-    try {
-      prompt = window.sessionStorage.getItem(handoffKey) ?? "";
-      if (prompt) window.sessionStorage.removeItem(handoffKey);
-    } catch {
-      /* sessionStorage unavailable */
-    }
-    if (prompt.trim()) void send(prompt.trim());
+    if (didInit.current) return;
+    const p = (initialPrompt ?? "").trim();
+    if (!p) return;
+    didInit.current = true;
+    void send(p);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [handoffKey]);
+  }, []);
 
   const patch = (id: number, fn: (m: UIMessage) => UIMessage) =>
     setMessages((prev) => prev.map((m) => (m.id === id ? fn(m) : m)));
@@ -115,6 +117,9 @@ export default function AssistantPanel({
     const payload = [...messages, userMsg].map((m) => ({ role: m.role, content: m.text }));
     // Plain-text note context (optional). Trimmed; the route also clamps it.
     const context = getContext?.().trim() ?? "";
+    const reqBody: Record<string, unknown> = { messages: payload };
+    if (context) reqBody.context = context;
+    if (docId) reqBody.docId = docId;
 
     setMessages((prev) => [...prev, userMsg, assistantMsg]);
     setInput("");
@@ -124,7 +129,7 @@ export default function AssistantPanel({
       const res = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(context ? { messages: payload, context } : { messages: payload }),
+        body: JSON.stringify(reqBody),
       });
 
       if (!res.ok || !res.body) {
@@ -162,6 +167,9 @@ export default function AssistantPanel({
             }));
             // Refresh server components (e.g. the dashboard's document list).
             router.refresh();
+          } else if (event.type === "append") {
+            // Insert the blocks into the open document (the workspace handles it).
+            onAppendBlocks?.(event.blocks);
           } else if (event.type === "error") {
             setError(event.error);
           }

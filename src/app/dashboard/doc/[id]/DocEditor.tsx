@@ -7,7 +7,7 @@ import BlockEditor from "@/components/editor/BlockEditor";
 import Canvas from "@/components/canvas/Canvas";
 import AssistantPanel from "@/components/ai/AssistantPanel";
 import { updateDocument } from "@/app/dashboard/actions";
-import type { Block } from "@/components/editor/types";
+import { newId, type Block } from "@/components/editor/types";
 import type { CanvasObject } from "@/components/canvas/types";
 
 type SaveStatus = "saved" | "saving" | "error";
@@ -39,8 +39,16 @@ export default function DocEditor({
   const [title, setTitle] = useState(initialTitle);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [focusTick, setFocusTick] = useState(0);
+  // Seed the (keyed) block editor. Changing `gen` remounts it with new blocks —
+  // how the assistant's appended content shows up without fighting live typing.
+  const [editorSeed, setEditorSeed] = useState({
+    title: initialTitle,
+    blocks: initialBlocks,
+    gen: 0,
+  });
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const editorScrollRef = useRef<HTMLDivElement>(null);
   // Latest document state across BOTH views, kept in a ref so the assistant can
   // read note text on demand and so either view's edit saves the whole record.
   const latest = useRef<{ title: string; blocks: Block[]; canvas: CanvasObject[] }>({
@@ -94,6 +102,27 @@ export default function DocEditor({
   function closeAssistant() {
     setAssistantOpen(false);
     toggleBtnRef.current?.focus();
+  }
+
+  // Insert AI-authored blocks into the open document: merge them onto the
+  // editor's current content (the client owns the merge + save, so there's no
+  // race with autosave), remount the editor to show them, and persist.
+  function handleAppendBlocks(incoming: Block[]) {
+    if (!incoming || incoming.length === 0) return;
+    // Re-mint ids so appended blocks can never collide with existing block ids.
+    const fresh = incoming.map((b) => ({ ...b, id: newId() }));
+    const merged = [...latest.current.blocks, ...fresh];
+    latest.current = { ...latest.current, blocks: merged };
+    setEditorSeed((s) => ({ title: latest.current.title, blocks: merged, gen: s.gen + 1 }));
+    setView("editor");
+    scheduleSave();
+    // Scroll the freshly-mounted editor down to the appended content.
+    requestAnimationFrame(() =>
+      setTimeout(() => {
+        const el = editorScrollRef.current;
+        if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+      }, 60),
+    );
   }
 
   return (
@@ -161,6 +190,7 @@ export default function DocEditor({
       <div className="flex min-h-0 flex-1">
         <main className="relative min-w-0 flex-1">
           <div
+            ref={editorScrollRef}
             role="tabpanel"
             id="panel-editor"
             aria-labelledby="tab-editor"
@@ -169,8 +199,9 @@ export default function DocEditor({
             className="h-full overflow-y-auto outline-none"
           >
             <BlockEditor
-              initialTitle={initialTitle}
-              initialBlocks={initialBlocks}
+              key={`editor-${editorSeed.gen}`}
+              initialTitle={editorSeed.title}
+              initialBlocks={editorSeed.blocks}
               onChange={onEditorChange}
             />
           </div>
@@ -201,6 +232,8 @@ export default function DocEditor({
             getContext={getContext}
             onClose={closeAssistant}
             focusSignal={focusTick}
+            docId={docId}
+            onAppendBlocks={handleAppendBlocks}
           />
         </aside>
       </div>
