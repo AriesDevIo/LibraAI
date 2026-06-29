@@ -26,6 +26,24 @@ expected result, and the **actual observed result** when run.
 Plus a standing check of the **A02 (Security Misconfiguration)** response
 headers — verified live, see the last section.
 
+## Recorded evidence (animated)
+
+Live captures of the two structural controls, recorded 2026-06-29:
+
+- **T01 · A01 — RLS isolation**
+  ![T01 — RLS denies cross-user reads](security-tests/T01-rls-isolation.gif)
+  An authenticated attacker (user B) queries the `documents` table directly; RLS
+  returns `attacker_b_can_see_documents = 0`.
+- **T02 · A05 — XSS in the editor**
+  ![T02 — payload rendered as inert text](security-tests/T02-xss-editor.gif)
+  A `<script>` payload (block) and an `<img onerror>` payload (title) are typed
+  in; both render as inert text — the armed `alert()` trap never fires and no
+  `<script>` / `<img onerror>` elements are injected.
+
+> T03 (prompt-injection) and T04 (rate-limit) are demonstrated **live in the demo**
+> (see [`DEMO.md`](DEMO.md)). T04 is deliberately not pre-run here, to preserve the
+> Supabase free-tier email quota needed for the live login.
+
 ---
 
 ## T01 — A01: fetch another user's document via the API → RLS denies
