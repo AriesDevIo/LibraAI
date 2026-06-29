@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { CloseCircle } from "@solar-icons/react/ssr";
+import { CloseCircle, GalleryMinimalistic, DangerTriangle } from "@solar-icons/react/ssr";
 import { isSafeImageUrl } from "./types";
+import { uploadImage } from "@/lib/uploads";
 
 interface ImageUrlDialogProps {
   onClose: () => void;
@@ -22,7 +23,10 @@ export default function ImageUrlDialog({ onClose, onAdd }: ImageUrlDialogProps) 
   const [url, setUrl] = useState("");
   const [alt, setAlt] = useState("");
   const [touched, setTouched] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [upErr, setUpErr] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const urlFieldId = useId();
   const altFieldId = useId();
 
@@ -52,6 +56,20 @@ export default function ImageUrlDialog({ onClose, onAdd }: ImageUrlDialogProps) 
     onAdd(url.trim(), alt.trim());
     onClose();
   };
+
+  async function handleFile(file: File | undefined | null) {
+    if (!file) return;
+    setUpErr(null);
+    setUploading(true);
+    const res = await uploadImage(file);
+    setUploading(false);
+    if ("url" in res) {
+      onAdd(res.url, alt.trim() || file.name.replace(/\.[^.]+$/, ""));
+      onClose();
+    } else {
+      setUpErr(res.error);
+    }
+  }
 
   const fieldStyle: React.CSSProperties = {
     background: "var(--color-bg)",
@@ -134,6 +152,45 @@ export default function ImageUrlDialog({ onClose, onAdd }: ImageUrlDialogProps) 
         ) : (
           <p className="mt-1.5 text-xs" style={{ color: "var(--color-accent)" }}>
             Only http and https links are allowed.
+          </p>
+        )}
+
+        {/* Or upload from device */}
+        <div className="mt-3 flex items-center gap-3">
+          <span className="h-px flex-1" style={{ background: "var(--color-surface-border)" }} />
+          <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--color-accent)" }}>
+            or
+          </span>
+          <span className="h-px flex-1" style={{ background: "var(--color-surface-border)" }} />
+        </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          className="hidden"
+          onChange={(e) => {
+            handleFile(e.target.files?.[0]);
+            e.target.value = "";
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading}
+          className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors disabled:opacity-50"
+          style={{
+            background: "var(--color-surface)",
+            border: "1px solid var(--color-surface-border)",
+            color: "var(--color-fg)",
+          }}
+        >
+          <GalleryMinimalistic size={15} color="currentColor" weight="Bold" />
+          {uploading ? "Uploading…" : "Upload from device"}
+        </button>
+        {upErr && (
+          <p className="mt-1.5 flex items-center gap-1.5 text-xs" style={{ color: "var(--color-secondary-text)" }}>
+            <DangerTriangle size={13} color="currentColor" weight="Bold" />
+            {upErr}
           </p>
         )}
 

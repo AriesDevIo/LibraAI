@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, type CSSProperties } from "react";
+import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import {
   AltArrowUp,
   AltArrowDown,
@@ -19,6 +19,7 @@ import {
   FONT_VALUES,
   type Block as BlockModel,
 } from "./types";
+import { uploadImage } from "@/lib/uploads";
 
 interface BlockProps {
   block: BlockModel;
@@ -381,6 +382,23 @@ function ImageSurface({
   const src = block.src ?? "";
   const safe = isSafeImageUrl(src);
   const invalid = src.trim().length > 0 && !safe;
+  const [uploading, setUploading] = useState(false);
+  const [upErr, setUpErr] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function handleFile(file: File | undefined | null) {
+    if (!file) return;
+    setUpErr(null);
+    setUploading(true);
+    const res = await uploadImage(file);
+    setUploading(false);
+    if ("url" in res) {
+      const caption = block.alt || file.name.replace(/\.[^.]+$/, "");
+      onImagePatch(block.id, { src: res.url, alt: caption });
+    } else {
+      setUpErr(res.error);
+    }
+  }
 
   return (
     <div className="my-1 flex flex-col gap-2">
@@ -396,7 +414,21 @@ function ImageSurface({
         />
       ) : (
         <div
-          className="flex flex-col items-center justify-center gap-1 rounded-xl px-4 py-8 text-center"
+          role="button"
+          tabIndex={0}
+          onClick={() => fileRef.current?.click()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              fileRef.current?.click();
+            }
+          }}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            handleFile(e.dataTransfer.files?.[0]);
+          }}
+          className="flex cursor-pointer flex-col items-center justify-center gap-1 rounded-xl px-4 py-8 text-center transition-colors hover:bg-[color-mix(in_srgb,var(--color-secondary)_6%,transparent)]"
           style={{
             background: "var(--color-surface)",
             border: "1px dashed var(--color-surface-border)",
@@ -404,32 +436,71 @@ function ImageSurface({
         >
           <GalleryMinimalistic size={26} color="var(--color-accent)" weight="Bold" />
           <span className="text-sm" style={{ color: "var(--color-accent)" }}>
-            Paste an image URL below
+            {uploading
+              ? "Uploading…"
+              : "Drag an image here, or click to upload — or paste a URL below"}
           </span>
         </div>
       )}
 
-      {/* URL field */}
-      <label
-        className="flex items-center gap-2 rounded-lg px-2.5 py-1.5"
-        style={{
-          background: "var(--color-surface)",
-          border: "1px solid var(--color-surface-border)",
+      {/* Hidden file input for upload (click + drag-drop both route here). */}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        className="hidden"
+        onChange={(e) => {
+          handleFile(e.target.files?.[0]);
+          e.target.value = ""; // allow re-selecting the same file
         }}
-      >
-        <LinkMinimalistic size={15} color="var(--color-accent)" weight="Bold" />
-        <input
-          ref={(el) => registerRef(block.id, el)}
-          type="url"
-          inputMode="url"
-          value={src}
-          placeholder="https://example.com/image.jpg"
-          onChange={(e) => onImagePatch(block.id, { src: e.target.value })}
-          onFocus={() => onFocus(block.id)}
-          className="w-full bg-transparent text-sm outline-none placeholder:opacity-40"
-          style={{ color: "var(--color-fg)" }}
-        />
-      </label>
+      />
+
+      {/* URL field + Upload button */}
+      <div className="flex items-center gap-2">
+        <label
+          className="flex flex-1 items-center gap-2 rounded-lg px-2.5 py-1.5"
+          style={{
+            background: "var(--color-surface)",
+            border: "1px solid var(--color-surface-border)",
+          }}
+        >
+          <LinkMinimalistic size={15} color="var(--color-accent)" weight="Bold" />
+          <input
+            ref={(el) => registerRef(block.id, el)}
+            type="url"
+            inputMode="url"
+            value={src}
+            placeholder="https://example.com/image.jpg"
+            onChange={(e) => onImagePatch(block.id, { src: e.target.value })}
+            onFocus={() => onFocus(block.id)}
+            className="w-full bg-transparent text-sm outline-none placeholder:opacity-40"
+            style={{ color: "var(--color-fg)" }}
+          />
+        </label>
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading}
+          className="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-colors disabled:opacity-50"
+          style={{
+            background: "color-mix(in srgb, var(--color-secondary) 12%, transparent)",
+            color: "var(--color-secondary-text)",
+          }}
+        >
+          <GalleryMinimalistic size={14} color="currentColor" weight="Bold" />
+          {uploading ? "Uploading…" : "Upload"}
+        </button>
+      </div>
+
+      {upErr && (
+        <p
+          className="flex items-center gap-1.5 text-xs"
+          style={{ color: "var(--color-secondary-text)" }}
+        >
+          <DangerTriangle size={13} color="currentColor" weight="Bold" />
+          {upErr}
+        </p>
+      )}
 
       {/* Alt text / caption */}
       <input
