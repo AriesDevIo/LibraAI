@@ -21,7 +21,17 @@ import {
 /** Active pointer gesture, tracked in a ref so moves don't churn React state. */
 type Gesture =
   | { kind: "pan"; startX: number; startY: number; origX: number; origY: number }
-  | { kind: "drag"; id: string; startX: number; startY: number; origX: number; origY: number }
+  | {
+      kind: "drag";
+      id: string;
+      startX: number;
+      startY: number;
+      origX: number;
+      origY: number;
+      /** Pointer capture is taken lazily (only once the drag actually moves) so a
+       *  stationary click/double-click still dispatches its native events. */
+      captured: boolean;
+    }
   | {
       kind: "resize";
       id: string;
@@ -225,6 +235,7 @@ export default function Canvas({ initialObjects, onChange }: CanvasProps = {}) {
         origH: obj.height,
       };
       setSelectedId(id);
+      e.currentTarget.setPointerCapture(e.pointerId);
     } else if (objEl) {
       const id = objEl.getAttribute("data-object-id")!;
       // While editing this note, let the textarea handle the pointer.
@@ -232,16 +243,15 @@ export default function Canvas({ initialObjects, onChange }: CanvasProps = {}) {
       const obj = objects.find((o) => o.id === id);
       if (!obj) return;
 
-      // Double-click / double-tap to edit. Detected here rather than via the DOM
-      // `dblclick` event, because the container takes pointer capture for
-      // dragging, which retargets `dblclick` away from the note so its handler
-      // never fires. Text objects only.
+      // Double-click / double-tap to edit. Detected here (not via the DOM
+      // `dblclick` event) so it also works on touch. Text objects only; the
+      // window matches a typical OS double-click speed.
       const lt = lastTap.current;
       if (
         obj.type === "text" &&
         lt &&
         lt.id === id &&
-        e.timeStamp - lt.time < 350
+        e.timeStamp - lt.time < 500
       ) {
         lastTap.current = null;
         setSelectedId(id);
@@ -250,6 +260,9 @@ export default function Canvas({ initialObjects, onChange }: CanvasProps = {}) {
       }
       lastTap.current = { id, time: e.timeStamp };
 
+      // Start a *potential* drag, but DON'T capture the pointer yet: capturing
+      // here would retarget the native click/dblclick to the container and
+      // break double-click-to-edit. We capture lazily once the pointer moves.
       gesture.current = {
         kind: "drag",
         id,
@@ -257,6 +270,7 @@ export default function Canvas({ initialObjects, onChange }: CanvasProps = {}) {
         startY: e.clientY,
         origX: obj.x,
         origY: obj.y,
+        captured: false,
       };
       setSelectedId(id);
     } else {
@@ -270,8 +284,8 @@ export default function Canvas({ initialObjects, onChange }: CanvasProps = {}) {
       };
       setSelectedId(null);
       setEditingId(null);
+      e.currentTarget.setPointerCapture(e.pointerId);
     }
-    e.currentTarget.setPointerCapture(e.pointerId);
   }
 
   function onPointerMove(e: React.PointerEvent) {
@@ -283,6 +297,17 @@ export default function Canvas({ initialObjects, onChange }: CanvasProps = {}) {
     if (g.kind === "pan") {
       setCamera({ x: g.origX + dx, y: g.origY + dy });
     } else if (g.kind === "drag") {
+      // Once the pointer has actually moved, this is a real drag: take pointer
+      // capture now (so it keeps tracking outside the element) and move.
+      if (!g.captured && Math.hypot(dx, dy) > 4) {
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+          /* pointer may already be gone */
+        }
+        g.captured = true;
+      }
+      if (!g.captured) return; // tiny jitter before a real drag — ignore
       setObjects((list) =>
         list.map((o) =>
           o.id === g.id ? { ...o, x: g.origX + dx, y: g.origY + dy } : o,
