@@ -4,11 +4,17 @@ import { useEffect, useRef, useState } from "react";
 import {
   Notes,
   GalleryAdd,
+  EmojiFunnySquare,
   Palette,
+  Copy,
+  AltArrowUp,
+  AltArrowDown,
   TrashBinMinimalistic,
   Restart,
 } from "@solar-icons/react/ssr";
-import { COLOR_SWATCHES, colorValue, type ColorKey } from "./types";
+import { COLOR_SWATCHES, EMOJI_PALETTE, colorValue, type ColorKey } from "./types";
+
+type Menu = "color" | "emoji" | null;
 
 interface ToolbarProps {
   hasSelection: boolean;
@@ -16,35 +22,42 @@ interface ToolbarProps {
   currentColor: ColorKey;
   onAddText: () => void;
   onAddImage: () => void;
+  onAddIcon: (emoji: string) => void;
   onPickColor: (color: ColorKey) => void;
+  onDuplicate: () => void;
+  onBringToFront: () => void;
+  onSendToBack: () => void;
   onDeleteSelected: () => void;
   onResetView: () => void;
 }
 
 /**
- * Floating canvas toolbar — add objects, recolour (brand palette), delete the
- * selection, and reset the pan. Recolour applies to the selected object, or
- * sets the colour for the next note when nothing is selected.
+ * Floating canvas toolbar — add notes / images / emoji icons, recolour (brand
+ * palette), duplicate, reorder (front/back), delete, and reset the pan.
  */
 export default function Toolbar({
   hasSelection,
   currentColor,
   onAddText,
   onAddImage,
+  onAddIcon,
   onPickColor,
+  onDuplicate,
+  onBringToFront,
+  onSendToBack,
   onDeleteSelected,
   onResetView,
 }: ToolbarProps) {
-  const [colorOpen, setColorOpen] = useState(false);
-  const pickerRef = useRef<HTMLDivElement>(null);
+  const [menu, setMenu] = useState<Menu>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!colorOpen) return;
+    if (!menu) return;
     const onDown = (e: MouseEvent) => {
-      if (!pickerRef.current?.contains(e.target as Node)) setColorOpen(false);
+      if (!rootRef.current?.contains(e.target as Node)) setMenu(null);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setColorOpen(false);
+      if (e.key === "Escape") setMenu(null);
     };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
@@ -52,14 +65,16 @@ export default function Toolbar({
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
     };
-  }, [colorOpen]);
+  }, [menu]);
 
   const btnBase =
     "flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-secondary)] disabled:opacity-40 disabled:cursor-not-allowed";
+  const fg = { color: "var(--color-fg)" };
 
   return (
     <div
-      className="pointer-events-auto flex items-center gap-1 rounded-2xl p-1.5 shadow-lg"
+      ref={rootRef}
+      className="pointer-events-auto flex flex-wrap items-center gap-1 rounded-2xl p-1.5 shadow-lg"
       style={{
         background: "var(--color-surface)",
         border: "1px solid var(--color-surface-border)",
@@ -69,121 +84,146 @@ export default function Toolbar({
       role="toolbar"
       aria-label="Canvas tools"
     >
-      <button
-        type="button"
-        onClick={onAddText}
-        className={btnBase}
-        style={{ color: "var(--color-fg)" }}
-        title="Add a text note"
-      >
+      <button type="button" onClick={onAddText} className={btnBase} style={fg} title="Add a text note">
         <Notes size={17} color="currentColor" weight="Bold" />
         <span className="hidden sm:inline">Note</span>
       </button>
 
-      <button
-        type="button"
-        onClick={onAddImage}
-        className={btnBase}
-        style={{ color: "var(--color-fg)" }}
-        title="Add an image by URL"
-      >
+      <button type="button" onClick={onAddImage} className={btnBase} style={fg} title="Add an image">
         <GalleryAdd size={17} color="currentColor" weight="Bold" />
         <span className="hidden sm:inline">Image</span>
       </button>
 
-      <Divider />
-
-      {/* Colour picker */}
-      <div className="relative" ref={pickerRef}>
+      {/* Emoji / icon palette */}
+      <div className="relative">
         <button
           type="button"
           aria-haspopup="true"
-          aria-expanded={colorOpen}
+          aria-expanded={menu === "emoji"}
+          onClick={() => setMenu((m) => (m === "emoji" ? null : "emoji"))}
+          className={btnBase}
+          style={{
+            ...fg,
+            background:
+              menu === "emoji"
+                ? "color-mix(in srgb, var(--color-secondary) 16%, transparent)"
+                : "transparent",
+          }}
+          title="Add an emoji / icon"
+        >
+          <EmojiFunnySquare size={17} color="currentColor" weight="Bold" />
+          <span className="hidden sm:inline">Icon</span>
+        </button>
+        {menu === "emoji" && (
+          <Popover>
+            <p className="mb-1.5 px-1 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--color-accent)" }}>
+              Add icon
+            </p>
+            <div className="grid grid-cols-4 gap-1">
+              {EMOJI_PALETTE.map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  aria-label={`Add ${emoji}`}
+                  onClick={() => {
+                    onAddIcon(emoji);
+                    setMenu(null);
+                  }}
+                  className="flex h-9 items-center justify-center rounded-lg text-xl transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-secondary)]"
+                  style={{ border: "1px solid var(--color-surface-border)" }}
+                >
+                  <span aria-hidden="true">{emoji}</span>
+                </button>
+              ))}
+            </div>
+          </Popover>
+        )}
+      </div>
+
+      <Divider />
+
+      {/* Colour picker */}
+      <div className="relative">
+        <button
+          type="button"
+          aria-haspopup="true"
+          aria-expanded={menu === "color"}
           aria-label="Pick colour"
-          title={hasSelection ? "Recolour selection" : "Colour for new notes"}
-          onClick={() => setColorOpen((o) => !o)}
+          title={hasSelection ? "Recolour selection" : "Colour for new objects"}
+          onClick={() => setMenu((m) => (m === "color" ? null : "color"))}
           className={`${btnBase} px-2`}
           style={{
-            background: colorOpen
-              ? "color-mix(in srgb, var(--color-secondary) 16%, transparent)"
-              : "transparent",
-            color: "var(--color-fg)",
+            ...fg,
+            background:
+              menu === "color"
+                ? "color-mix(in srgb, var(--color-secondary) 16%, transparent)"
+                : "transparent",
           }}
         >
           <Palette size={17} color={colorValue(currentColor)} weight="Bold" />
         </button>
-
-        {colorOpen && (
-          <div
-            className="absolute left-0 top-full z-30 mt-2 w-44 rounded-xl p-2 shadow-2xl"
-            style={{
-              background: "var(--color-bg)",
-              border: "1px solid var(--color-surface-border)",
-            }}
-          >
-            <p
-              className="mb-1.5 px-1 text-[10px] font-semibold uppercase tracking-wider"
-              style={{ color: "var(--color-accent)" }}
-            >
-              {hasSelection ? "Recolour note" : "New note colour"}
+        {menu === "color" && (
+          <Popover>
+            <p className="mb-1.5 px-1 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--color-accent)" }}>
+              {hasSelection ? "Recolour" : "New object colour"}
             </p>
             <div className="grid grid-cols-4 gap-1">
-              {COLOR_SWATCHES.map(({ key, label }) => {
-                const selected = key === currentColor;
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    title={label}
-                    aria-label={label}
-                    aria-pressed={selected}
-                    onClick={() => {
-                      onPickColor(key);
-                      setColorOpen(false);
-                    }}
-                    className="flex h-9 items-center justify-center rounded-lg transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-secondary)]"
-                    style={{
-                      border: selected
+              {COLOR_SWATCHES.map(({ key, label }) => (
+                <button
+                  key={key}
+                  type="button"
+                  title={label}
+                  aria-label={label}
+                  aria-pressed={key === currentColor}
+                  onClick={() => {
+                    onPickColor(key);
+                    setMenu(null);
+                  }}
+                  className="flex h-9 items-center justify-center rounded-lg transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-secondary)]"
+                  style={{
+                    border:
+                      key === currentColor
                         ? "2px solid var(--color-secondary)"
                         : "1px solid var(--color-surface-border)",
-                    }}
-                  >
-                    <span
-                      className="h-4 w-4 rounded-full"
-                      style={{ background: colorValue(key) }}
-                    />
-                  </button>
-                );
-              })}
+                  }}
+                >
+                  <span className="h-4 w-4 rounded-full" style={{ background: colorValue(key) }} />
+                </button>
+              ))}
             </div>
-          </div>
+          </Popover>
         )}
       </div>
 
-      <button
-        type="button"
-        onClick={onDeleteSelected}
-        disabled={!hasSelection}
-        className={`${btnBase} px-2`}
-        style={{ color: "var(--color-secondary-text)" }}
-        title="Delete selected"
-        aria-label="Delete selected object"
-      >
+      <button type="button" onClick={onDuplicate} disabled={!hasSelection} className={`${btnBase} px-2`} style={fg} title="Duplicate (⌘D)" aria-label="Duplicate selected">
+        <Copy size={16} color="currentColor" weight="Bold" />
+      </button>
+      <button type="button" onClick={onBringToFront} disabled={!hasSelection} className={`${btnBase} px-2`} style={fg} title="Bring to front" aria-label="Bring selected to front">
+        <AltArrowUp size={16} color="currentColor" weight="Bold" />
+      </button>
+      <button type="button" onClick={onSendToBack} disabled={!hasSelection} className={`${btnBase} px-2`} style={fg} title="Send to back" aria-label="Send selected to back">
+        <AltArrowDown size={16} color="currentColor" weight="Bold" />
+      </button>
+      <button type="button" onClick={onDeleteSelected} disabled={!hasSelection} className={`${btnBase} px-2`} style={{ color: "var(--color-secondary-text)" }} title="Delete selected" aria-label="Delete selected object">
         <TrashBinMinimalistic size={17} color="currentColor" weight="Bold" />
       </button>
 
       <Divider />
 
-      <button
-        type="button"
-        onClick={onResetView}
-        className={`${btnBase} px-2`}
-        style={{ color: "var(--color-fg)" }}
-        title="Reset view"
-        aria-label="Reset view to origin"
-      >
+      <button type="button" onClick={onResetView} className={`${btnBase} px-2`} style={fg} title="Reset view" aria-label="Reset view to origin">
         <Restart size={17} color="currentColor" weight="Bold" />
       </button>
+    </div>
+  );
+}
+
+function Popover({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="absolute left-0 top-full z-30 mt-2 w-44 rounded-xl p-2 shadow-2xl"
+      style={{ background: "var(--color-bg)", border: "1px solid var(--color-surface-border)" }}
+    >
+      {children}
     </div>
   );
 }

@@ -15,8 +15,8 @@
  *    render time too, so even tampered state can't inject.
  */
 
-/** A canvas object is either a text note or an image block. */
-export type CanvasObjectType = "text" | "image";
+/** A canvas object is a text note, an image block, or an emoji/icon sticker. */
+export type CanvasObjectType = "text" | "image" | "icon";
 
 /**
  * Closed set of brand-palette colour choices. Objects only ever store one of
@@ -87,7 +87,13 @@ export interface ImageObject extends BaseObject {
   alt: string;
 }
 
-export type CanvasObject = TextObject | ImageObject;
+export interface IconObject extends BaseObject {
+  type: "icon";
+  /** A short emoji/character string, rendered as an escaped text node. */
+  emoji: string;
+}
+
+export type CanvasObject = TextObject | ImageObject | IconObject;
 
 /** Minimum object size, in px, so things can't be resized into nothing. */
 export const MIN_SIZE = { width: 80, height: 56 } as const;
@@ -95,6 +101,14 @@ export const MIN_SIZE = { width: 80, height: 56 } as const;
 /** Default sizes for freshly added objects. */
 export const DEFAULT_TEXT_SIZE = { width: 220, height: 132 } as const;
 export const DEFAULT_IMAGE_SIZE = { width: 260, height: 180 } as const;
+export const DEFAULT_ICON_SIZE = { width: 96, height: 96 } as const;
+
+/** Preset emoji palette for icon objects. Rendered as escaped text nodes, so
+ *  even an arbitrary value can never execute — XSS-safe by construction. */
+export const EMOJI_PALETTE = [
+  "⭐", "✅", "💡", "🔥", "❤️", "📌", "🎯", "⚡",
+  "📝", "🚀", "✨", "⚠️", "👍", "🎉", "🔖", "📊",
+] as const;
 
 /**
  * Validate an image URL. Only http(s) is allowed — this blocks `javascript:`,
@@ -172,6 +186,12 @@ export function sanitizeCanvas(raw: unknown): CanvasObject[] {
         src: typeof o.src === "string" ? o.src : "",
         alt: typeof o.alt === "string" ? o.alt : "",
       });
+    } else if (o.type === "icon") {
+      out.push({
+        ...base,
+        type: "icon",
+        emoji: typeof o.emoji === "string" ? o.emoji.slice(0, 16) : "⭐",
+      });
     }
   }
   return out;
@@ -207,6 +227,24 @@ export function createImageObject(
     color: "violet",
     src,
     alt: "",
+    ...overrides,
+  };
+}
+
+/** Create an emoji/icon sticker. */
+export function createIconObject(
+  emoji: string,
+  overrides: Partial<IconObject> = {},
+): IconObject {
+  return {
+    id: newId(),
+    type: "icon",
+    x: 0,
+    y: 0,
+    width: DEFAULT_ICON_SIZE.width,
+    height: DEFAULT_ICON_SIZE.height,
+    color: "violet",
+    emoji,
     ...overrides,
   };
 }

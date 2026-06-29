@@ -58,7 +58,9 @@ export default function CanvasObjectView({
       aria-label={
         obj.type === "text"
           ? `Text note${obj.text ? `: ${obj.text}` : " (empty)"}`
-          : `Image${obj.alt ? `: ${obj.alt}` : ""}`
+          : obj.type === "image"
+            ? `Image${obj.alt ? `: ${obj.alt}` : ""}`
+            : `Icon ${obj.emoji}`
       }
       tabIndex={-1}
       onDoubleClick={
@@ -75,8 +77,10 @@ export default function CanvasObjectView({
           onChangeText={onChangeText}
           onCommitEdit={onCommitEdit}
         />
-      ) : (
+      ) : obj.type === "image" ? (
         <ImageBody obj={obj} accent={accent} />
+      ) : (
+        <IconBody obj={obj} />
       )}
 
       {selected && (
@@ -239,6 +243,20 @@ function ImageBody({
         onError={() => setErrored(true)}
         className="h-full w-full object-cover"
       />
+    </div>
+  );
+}
+
+function IconBody({ obj }: { obj: CanvasObject & { type: "icon" } }) {
+  // Emoji scales to the object's size. It's rendered as a plain text node, so
+  // React escapes it — never executable.
+  const fontSize = Math.max(16, Math.min(obj.width, obj.height) * 0.72);
+  return (
+    <div
+      className="flex h-full w-full cursor-grab select-none items-center justify-center active:cursor-grabbing"
+      style={{ fontSize, lineHeight: 1 }}
+    >
+      <span aria-hidden="true">{obj.emoji}</span>
     </div>
   );
 }

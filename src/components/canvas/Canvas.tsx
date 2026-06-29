@@ -9,7 +9,10 @@ import {
   type ColorKey,
   createImageObject,
   createTextObject,
+  createIconObject,
+  newId,
   reserveIds,
+  DEFAULT_ICON_SIZE,
   DEFAULT_IMAGE_SIZE,
   DEFAULT_TEXT_SIZE,
   MIN_SIZE,
@@ -159,6 +162,14 @@ export default function Canvas({ initialObjects, onChange }: CanvasProps = {}) {
     setSelectedId(obj.id);
   }
 
+  function addIcon(emoji: string) {
+    const { width, height } = DEFAULT_ICON_SIZE;
+    const { x, y } = centerWorldPoint(width, height, objects.length);
+    const obj = createIconObject(emoji, { x, y, color: defaultColor });
+    setObjects((o) => [...o, obj]);
+    setSelectedId(obj.id);
+  }
+
   function pickColor(color: ColorKey) {
     if (selectedId) {
       setObjects((list) =>
@@ -167,6 +178,29 @@ export default function Canvas({ initialObjects, onChange }: CanvasProps = {}) {
     } else {
       setDefaultColor(color);
     }
+  }
+
+  function duplicateSelected() {
+    if (!selectedId) return;
+    const sel = objects.find((o) => o.id === selectedId);
+    if (!sel) return;
+    const clone = { ...sel, id: newId(), x: sel.x + 24, y: sel.y + 24 };
+    setObjects((o) => [...o, clone]);
+    setSelectedId(clone.id);
+  }
+
+  // Z-order is the array order (later = on top among unselected objects).
+  function bringToFront(id: string) {
+    setObjects((list) => {
+      const o = list.find((x) => x.id === id);
+      return o ? [...list.filter((x) => x.id !== id), o] : list;
+    });
+  }
+  function sendToBack(id: string) {
+    setObjects((list) => {
+      const o = list.find((x) => x.id === id);
+      return o ? [o, ...list.filter((x) => x.id !== id)] : list;
+    });
   }
 
   // ── Pointer gestures (container owns capture) ─────────────────────
@@ -264,6 +298,11 @@ export default function Canvas({ initialObjects, onChange }: CanvasProps = {}) {
       deleteObject(selectedId);
       return;
     }
+    if ((e.metaKey || e.ctrlKey) && (e.key === "d" || e.key === "D")) {
+      e.preventDefault();
+      duplicateSelected();
+      return;
+    }
     const nudges: Record<string, [number, number]> = {
       ArrowUp: [0, -1],
       ArrowDown: [0, 1],
@@ -346,7 +385,11 @@ export default function Canvas({ initialObjects, onChange }: CanvasProps = {}) {
           currentColor={currentColor}
           onAddText={addText}
           onAddImage={() => setImageDialogOpen(true)}
+          onAddIcon={addIcon}
           onPickColor={pickColor}
+          onDuplicate={duplicateSelected}
+          onBringToFront={() => selectedId && bringToFront(selectedId)}
+          onSendToBack={() => selectedId && sendToBack(selectedId)}
           onDeleteSelected={() => selectedId && deleteObject(selectedId)}
           onResetView={() => setCamera({ x: 0, y: 0 })}
         />
