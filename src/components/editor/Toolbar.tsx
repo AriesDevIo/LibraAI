@@ -1,13 +1,21 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { TextBold, TextItalic, TextUnderline, Code } from "@solar-icons/react/ssr";
+import {
+  TextBold,
+  TextItalic,
+  TextUnderline,
+  Code,
+  GalleryMinimalistic,
+  SmileCircle,
+} from "@solar-icons/react/ssr";
 import {
   COLOR_SWATCHES,
   FONT_OPTIONS,
   SIZE_OPTIONS,
   colorValue,
   fontValue,
+  type BlockType,
   type ColorKey,
   type FontKey,
   type SizeKey,
@@ -29,6 +37,10 @@ interface ToolbarProps {
   onSetColor: (color: ColorKey) => void;
   onSetFont: (font: FontKey) => void;
   onSetSize: (size: SizeKey) => void;
+  /** Insert a new block (e.g. image / icon) after the active block. Always
+   *  available — unlike the text-formatting controls, it isn't gated by
+   *  `disabled`. */
+  onInsert: (type: BlockType) => void;
 }
 
 /**
@@ -51,6 +63,7 @@ export default function Toolbar({
   onSetColor,
   onSetFont,
   onSetSize,
+  onInsert,
 }: ToolbarProps) {
   const [menu, setMenu] = useState<Menu>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -238,6 +251,36 @@ export default function Toolbar({
           </Popover>
         )}
       </div>
+
+      <Divider />
+
+      {/* Insert group — adds a new block. Always enabled (not a text format). */}
+      <button
+        type="button"
+        aria-label="Insert image"
+        title="Insert image"
+        onMouseDown={(e) => {
+          e.preventDefault();
+          onInsert("image");
+        }}
+        className={iconBtn}
+        style={{ color: "var(--color-fg)" }}
+      >
+        <GalleryMinimalistic size={16} color="currentColor" weight="Bold" />
+      </button>
+      <button
+        type="button"
+        aria-label="Insert icon"
+        title="Insert icon"
+        onMouseDown={(e) => {
+          e.preventDefault();
+          onInsert("icon");
+        }}
+        className={iconBtn}
+        style={{ color: "var(--color-fg)" }}
+      >
+        <SmileCircle size={16} color="currentColor" weight="Bold" />
+      </button>
     </div>
   );
 }

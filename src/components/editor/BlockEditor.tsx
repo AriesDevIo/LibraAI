@@ -247,6 +247,19 @@ export default function BlockEditor({
     pendingFocus.current = { id: nb.id, caret: "start" };
   };
 
+  /** Insert a new block of `type` right after the active block (or at the end)
+   *  and focus it. Powers the toolbar's Image / Icon buttons, so adding media
+   *  doesn't require knowing the "/" menu. */
+  const insertBlock = (type: BlockType) => {
+    const nb = createBlock(type);
+    const idx = activeId ? blocks.findIndex((b) => b.id === activeId) : -1;
+    const copy = blocks.slice();
+    copy.splice(idx >= 0 ? idx + 1 : copy.length, 0, nb);
+    setBlocks(copy);
+    setActiveId(nb.id);
+    pendingFocus.current = { id: nb.id, caret: "start" };
+  };
+
   /* ── Formatting (acts on the active block) ──────────────────────────────── */
 
   const toggleMark = (key: ToggleMark) => {
@@ -514,6 +527,7 @@ export default function BlockEditor({
           onSetColor={setColor}
           onSetFont={setFont}
           onSetSize={setSize}
+          onInsert={insertBlock}
         />
       </div>
 

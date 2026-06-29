@@ -237,7 +237,9 @@ function IconSurface({
 }) {
   // Auto-open the picker for a freshly inserted (icon-less) block.
   const [open, setOpen] = useState(!block.icon);
-  const Cmp = iconComponent(block.icon);
+  // Resolve the icon component via the whitelist. Rendered with createElement
+  // (not a `<Cmp/>` tag) since it's chosen at runtime, not a static component.
+  const iconCmp = iconComponent(block.icon);
   const sizeKey = block.iconSize ?? "md";
   const px = ICON_SIZE_VALUES[sizeKey];
   const color = colorValue(block.marks.color);
@@ -251,14 +253,18 @@ function IconSurface({
             onFocus(block.id);
             setOpen(true);
           }}
-          aria-label={Cmp ? "Change icon" : "Pick an icon"}
+          aria-label={iconCmp ? "Change icon" : "Pick an icon"}
           aria-haspopup="dialog"
           aria-expanded={open}
           className="flex items-center justify-center rounded-xl p-2 transition-colors hover:bg-[color-mix(in_srgb,var(--color-secondary)_10%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-secondary)]"
           style={{ color }}
         >
-          {Cmp ? (
-            <Cmp size={px} color="currentColor" weight="Bold" />
+          {iconCmp ? (
+            createElement(iconCmp, {
+              size: px,
+              color: "currentColor",
+              weight: "Bold",
+            })
           ) : (
             <span
               className="flex items-center gap-2 text-sm"
@@ -271,7 +277,7 @@ function IconSurface({
         </button>
 
         {/* Size + colour controls — appear on hover / keyboard focus. */}
-        {Cmp && (
+        {iconCmp && (
           <div className="flex items-center gap-2 opacity-0 transition-opacity group-hover/icon:opacity-100 focus-within:opacity-100">
             <div
               className="flex items-center gap-0.5 rounded-lg p-0.5"
