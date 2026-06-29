@@ -7,6 +7,7 @@ import {
   CheckSquare,
   Lightbulb,
   Code,
+  SmileCircle,
 } from "@solar-icons/react/ssr";
 import type { BlockType, BlockTypeMeta } from "./types";
 
@@ -31,6 +32,8 @@ function TypeIcon({ meta }: { meta: BlockTypeMeta }) {
       return <Lightbulb {...common} />;
     case "code":
       return <Code {...common} />;
+    case "icon":
+      return <SmileCircle {...common} />;
     default:
       return <Text {...common} />;
   }

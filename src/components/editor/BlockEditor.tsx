@@ -22,6 +22,7 @@ import {
   type BlockType,
   type ColorKey,
   type FontKey,
+  type IconSizeKey,
   type SizeKey,
   type ToggleMark,
   DEFAULT_MARKS,
@@ -299,6 +300,26 @@ export default function BlockEditor({
     );
   };
 
+  /** Update an icon block: its icon key, display size, and/or colour (the icon
+   *  block's controls live in-block since the toolbar only acts on text). */
+  const handleIconPatch = (
+    id: string,
+    patch: { icon?: string; iconSize?: IconSizeKey; color?: ColorKey },
+  ) => {
+    setBlocks((bs) =>
+      bs.map((b) => {
+        if (b.id !== id) return b;
+        const next: BlockModel = { ...b };
+        if (patch.icon !== undefined) next.icon = patch.icon;
+        if (patch.iconSize !== undefined) next.iconSize = patch.iconSize;
+        if (patch.color !== undefined) {
+          next.marks = { ...b.marks, color: patch.color };
+        }
+        return next;
+      }),
+    );
+  };
+
   const handleFocus = (id: string) => {
     setActiveId(id);
     setSlash((s) => (s && s.blockId !== id ? null : s));
@@ -507,6 +528,7 @@ export default function BlockEditor({
             registerRef={registerRef}
             onChangeText={handleChangeText}
             onImagePatch={handleImagePatch}
+            onIconPatch={handleIconPatch}
             onToggleCheck={toggleCheck}
             onKeyDown={handleKeyDown}
             onFocus={handleFocus}

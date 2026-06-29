@@ -27,6 +27,7 @@ export type BlockType =
   | "callout"
   | "code"
   | "divider"
+  | "icon"
   | "image";
 
 /** Closed set of text-color choices. The block only ever stores one of these
@@ -71,6 +72,11 @@ export interface Block {
   src?: string;
   /** Image blocks only: alt text (plain string, also escaped on render). */
   alt?: string;
+  /** Icon blocks only: a KEY into the editor icon registry (see icons.ts).
+   *  Rendered by whitelist lookup → a missing key shows nothing (never raw). */
+  icon?: string;
+  /** Icon blocks only: display size. */
+  iconSize?: IconSizeKey;
 }
 
 export const DEFAULT_MARKS: TextMarks = {
@@ -155,9 +161,24 @@ export const SIZE_OPTIONS: { key: SizeKey; label: string }[] = [
   { key: "xl", label: "X-Large" },
 ];
 
-/** Text blocks accept a caret + text formatting. Divider/image do not. */
+/** Icon block display sizes (in px). */
+export type IconSizeKey = "sm" | "md" | "lg";
+
+export const ICON_SIZE_VALUES: Record<IconSizeKey, number> = {
+  sm: 24,
+  md: 40,
+  lg: 64,
+};
+
+export const ICON_SIZE_OPTIONS: { key: IconSizeKey; label: string }[] = [
+  { key: "sm", label: "Small" },
+  { key: "md", label: "Medium" },
+  { key: "lg", label: "Large" },
+];
+
+/** Text blocks accept a caret + text formatting. Divider/icon/image do not. */
 export const isTextBlock = (type: BlockType): boolean =>
-  type !== "image" && type !== "divider";
+  type !== "image" && type !== "divider" && type !== "icon";
 
 /** Block kinds that render a leading marker and renumber as a run. */
 export const isListBlock = (type: BlockType): boolean =>
@@ -256,6 +277,12 @@ export const BLOCK_TYPES: BlockTypeMeta[] = [
     description: "A horizontal separator line.",
     glyph: "—",
     keywords: ["divider", "separator", "rule", "hr", "line"],
+  },
+  {
+    type: "icon",
+    label: "Icon",
+    description: "Insert a Solar icon.",
+    keywords: ["icon", "symbol", "emoji", "sticker", "glyph", "solar"],
   },
   {
     type: "image",

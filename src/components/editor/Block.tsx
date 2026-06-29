@@ -1,6 +1,12 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  createElement,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import {
   AltArrowUp,
   AltArrowDown,
@@ -17,8 +23,15 @@ import {
   isTextBlock,
   isSafeImageUrl,
   FONT_VALUES,
+  COLOR_SWATCHES,
+  ICON_SIZE_VALUES,
+  ICON_SIZE_OPTIONS,
   type Block as BlockModel,
+  type ColorKey,
+  type IconSizeKey,
 } from "./types";
+import { iconComponent } from "./icons";
+import IconPicker from "./IconPicker";
 import { uploadImage } from "@/lib/uploads";
 
 interface BlockProps {
@@ -33,6 +46,10 @@ interface BlockProps {
   ) => void;
   onChangeText: (id: string, text: string) => void;
   onImagePatch: (id: string, patch: { src?: string; alt?: string }) => void;
+  onIconPatch: (
+    id: string,
+    patch: { icon?: string; iconSize?: IconSizeKey; color?: ColorKey },
+  ) => void;
   onToggleCheck: (id: string) => void;
   onKeyDown: (id: string, e: React.KeyboardEvent) => void;
   onFocus: (id: string) => void;
@@ -78,6 +95,7 @@ export default function Block({
   registerRef,
   onChangeText,
   onImagePatch,
+  onIconPatch,
   onToggleCheck,
   onKeyDown,
   onFocus,
@@ -125,6 +143,12 @@ export default function Block({
       <div className="relative min-w-0 flex-1">
         {block.type === "divider" ? (
           <DividerSurface />
+        ) : block.type === "icon" ? (
+          <IconSurface
+            block={block}
+            onIconPatch={onIconPatch}
+            onFocus={onFocus}
+          />
         ) : text ? (
           <TextSurface
             block={block}
@@ -196,6 +220,130 @@ function DividerSurface() {
         className="border-0"
         style={{ height: 1, background: "var(--color-surface-border)" }}
       />
+    </div>
+  );
+}
+
+/* ── Icon blocks (insert a Solar icon) ──────────────────────────────────────── */
+
+function IconSurface({
+  block,
+  onIconPatch,
+  onFocus,
+}: {
+  block: BlockModel;
+  onIconPatch: BlockProps["onIconPatch"];
+  onFocus: BlockProps["onFocus"];
+}) {
+  // Auto-open the picker for a freshly inserted (icon-less) block.
+  const [open, setOpen] = useState(!block.icon);
+  const Cmp = iconComponent(block.icon);
+  const sizeKey = block.iconSize ?? "md";
+  const px = ICON_SIZE_VALUES[sizeKey];
+  const color = colorValue(block.marks.color);
+
+  return (
+    <div className="group/icon relative my-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            onFocus(block.id);
+            setOpen(true);
+          }}
+          aria-label={Cmp ? "Change icon" : "Pick an icon"}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          className="flex items-center justify-center rounded-xl p-2 transition-colors hover:bg-[color-mix(in_srgb,var(--color-secondary)_10%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-secondary)]"
+          style={{ color }}
+        >
+          {Cmp ? (
+            <Cmp size={px} color="currentColor" weight="Bold" />
+          ) : (
+            <span
+              className="flex items-center gap-2 text-sm"
+              style={{ color: "var(--color-accent)" }}
+            >
+              <GalleryMinimalistic size={20} color="currentColor" weight="Bold" />
+              Pick an icon
+            </span>
+          )}
+        </button>
+
+        {/* Size + colour controls — appear on hover / keyboard focus. */}
+        {Cmp && (
+          <div className="flex items-center gap-2 opacity-0 transition-opacity group-hover/icon:opacity-100 focus-within:opacity-100">
+            <div
+              className="flex items-center gap-0.5 rounded-lg p-0.5"
+              style={{
+                background: "var(--color-surface)",
+                border: "1px solid var(--color-surface-border)",
+              }}
+            >
+              {ICON_SIZE_OPTIONS.map((s) => {
+                const sel = s.key === sizeKey;
+                return (
+                  <button
+                    key={s.key}
+                    type="button"
+                    title={s.label}
+                    aria-label={`Size: ${s.label}`}
+                    aria-pressed={sel}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => onIconPatch(block.id, { iconSize: s.key })}
+                    className="rounded-md px-1.5 py-0.5 text-[10px] font-bold transition-colors"
+                    style={{
+                      background: sel
+                        ? "color-mix(in srgb, var(--color-secondary) 16%, transparent)"
+                        : "transparent",
+                      color: sel
+                        ? "var(--color-secondary-text)"
+                        : "var(--color-accent)",
+                    }}
+                  >
+                    {s.label[0]}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center gap-1">
+              {COLOR_SWATCHES.map(({ key, label }) => {
+                const sel = key === block.marks.color;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    title={label}
+                    aria-label={`Colour: ${label}`}
+                    aria-pressed={sel}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => onIconPatch(block.id, { color: key })}
+                    className="h-4 w-4 rounded-full transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-secondary)]"
+                    style={{
+                      background: colorValue(key),
+                      border: sel
+                        ? "2px solid var(--color-fg)"
+                        : "1px solid var(--color-surface-border)",
+                    }}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {open && (
+        <IconPicker
+          current={block.icon}
+          onSelect={(key) => {
+            onIconPatch(block.id, { icon: key });
+            setOpen(false);
+          }}
+          onClose={() => setOpen(false)}
+        />
+      )}
     </div>
   );
 }
