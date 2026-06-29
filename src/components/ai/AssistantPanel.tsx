@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { ImageResult, StreamEvent } from "@/lib/ai/types";
+import { renderMarkdown } from "./markdown";
+
+type CreatedDoc = { id: string; title: string };
 
 /* Libra AI assistant — chat panel. Streams a Claude reply over NDJSON and
    renders any images the assistant surfaces via the search_images tool.
@@ -18,6 +23,7 @@ type UIMessage = {
   role: "user" | "assistant";
   text: string;
   images: ImageResult[];
+  documents: CreatedDoc[];
 };
 
 const inputStyle = {
@@ -28,8 +34,8 @@ const inputStyle = {
 } as React.CSSProperties;
 
 const GENERAL_EXAMPLES = [
-  "Draft a meeting agenda for a 30-minute project kickoff",
-  "Summarize the key ideas of zero-trust security in 5 bullets",
+  "Create a meeting-agenda note for a 30-minute kickoff",
+  "Draft a reading list of 5 must-read sci-fi books",
   "Find some images of a mountain sunrise for my travel note",
 ];
 
@@ -60,6 +66,7 @@ export default function AssistantPanel({
   const idRef = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const router = useRouter();
 
   const hasContext = typeof getContext === "function";
   const examples = hasContext ? NOTE_EXAMPLES : GENERAL_EXAMPLES;
@@ -81,9 +88,9 @@ export default function AssistantPanel({
     if (!prompt || streaming) return;
     setError(null);
 
-    const userMsg: UIMessage = { id: ++idRef.current, role: "user", text: prompt, images: [] };
+    const userMsg: UIMessage = { id: ++idRef.current, role: "user", text: prompt, images: [], documents: [] };
     const assistantId = ++idRef.current;
-    const assistantMsg: UIMessage = { id: assistantId, role: "assistant", text: "", images: [] };
+    const assistantMsg: UIMessage = { id: assistantId, role: "assistant", text: "", images: [], documents: [] };
 
     // Build the API payload from the prior turns + this new user message.
     const payload = [...messages, userMsg].map((m) => ({ role: m.role, content: m.text }));
@@ -129,6 +136,13 @@ export default function AssistantPanel({
             patch(assistantId, (m) => ({ ...m, text: m.text + event.text }));
           } else if (event.type === "images") {
             patch(assistantId, (m) => ({ ...m, images: [...m.images, ...event.images] }));
+          } else if (event.type === "document") {
+            patch(assistantId, (m) => ({
+              ...m,
+              documents: [...m.documents, { id: event.id, title: event.title }],
+            }));
+            // Refresh server components (e.g. the dashboard's document list).
+            router.refresh();
           } else if (event.type === "error") {
             setError(event.error);
           }
@@ -293,7 +307,9 @@ function MessageBubble({ message }: { message: UIMessage }) {
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div className={`max-w-[85%] ${isUser ? "items-end" : "items-start"} flex flex-col gap-2`}>
         <div
-          className="px-4 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap break-words"
+          className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed break-words ${
+            isUser ? "whitespace-pre-wrap" : ""
+          }`}
           style={
             isUser
               ? { background: "var(--color-secondary)", color: "white" }
@@ -304,8 +320,40 @@ function MessageBubble({ message }: { message: UIMessage }) {
                 }
           }
         >
-          {message.text || (isUser ? "" : "​")}
+          {isUser ? message.text : message.text ? renderMarkdown(message.text) : "​"}
         </div>
+
+        {message.documents.length > 0 && (
+          <div className="flex w-full flex-col gap-2">
+            {message.documents.map((doc) => (
+              <Link
+                key={doc.id}
+                href={`/dashboard/doc/${doc.id}`}
+                className="group flex items-center gap-2.5 rounded-xl px-3 py-2.5 transition-colors hover:bg-[color-mix(in_srgb,var(--color-secondary)_7%,transparent)]"
+                style={{ background: "var(--color-surface)", border: "1px solid var(--color-surface-border)" }}
+              >
+                <span
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+                  style={{
+                    background: "color-mix(in srgb, var(--color-secondary) 12%, transparent)",
+                    color: "var(--color-secondary-text)",
+                  }}
+                  aria-hidden="true"
+                >
+                  <DocIcon />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold" style={{ color: "var(--color-fg)" }}>
+                    {doc.title}
+                  </span>
+                  <span className="block text-[11px]" style={{ color: "var(--color-secondary-text)" }}>
+                    Open document →
+                  </span>
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
 
         {message.images.length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 w-full">
@@ -385,6 +433,20 @@ function CloseIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function DocIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M6 3h7l5 5v13a0 0 0 0 1 0 0H6a0 0 0 0 1 0 0V3Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+      <path d="M13 3v5h5M9 13h6M9 17h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }

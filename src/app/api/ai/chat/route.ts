@@ -6,6 +6,7 @@ import { SYSTEM_PROMPT } from "@/lib/ai/system-prompt";
 import { searchImages } from "@/lib/ai/images";
 import { checkRateLimit } from "@/lib/ai/rate-limit";
 import type { ChatMessage, StreamEvent } from "@/lib/ai/types";
+import { createBlock, type Block, type BlockType } from "@/components/editor/types";
 
 // The Agent SDK spawns the Claude Code subprocess; force a dynamic Node runtime.
 export const runtime = "nodejs";
@@ -16,8 +17,48 @@ const MAX_CONTENT_CHARS = 8000;
 // Plain-text note context the document workspace may attach. Clamped so a huge
 // note can't blow up the prompt.
 const MAX_CONTEXT_CHARS = 6000;
+// Bounds for AI-created documents.
+const MAX_DOC_TITLE = 200;
+const MAX_DOC_CONTENT = 20_000;
+const MAX_DOC_BLOCKS = 300;
 // Abort if the agent goes silent (dead/stuck subprocess) so the stream closes.
 const INACTIVITY_TIMEOUT_MS = 120_000;
+
+/** Strip Markdown emphasis/code markers, leaving plain text (the block model
+ *  stores plain strings + per-block marks, not inline spans). XSS-safe output. */
+function stripInline(s: string): string {
+  return s
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/__(.+?)__/g, "$1")
+    .replace(/\*(.+?)\*/g, "$1")
+    .replace(/_(.+?)_/g, "$1")
+    .replace(/`(.+?)`/g, "$1")
+    .trim();
+}
+
+/** Convert Markdown into the editor's Block[] model so an AI-created document
+ *  opens as real headings / lists / paragraphs. Text fields are plain strings. */
+function markdownToBlocks(md: string): Block[] {
+  const blocks: Block[] = [];
+  const push = (type: BlockType, text: string) => {
+    if (blocks.length >= MAX_DOC_BLOCKS) return;
+    blocks.push(createBlock(type, { text }));
+  };
+
+  for (const raw of md.replace(/\r\n/g, "\n").split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    let m: RegExpExecArray | null;
+    if ((m = /^###\s+(.*)/.exec(line))) push("h3", stripInline(m[1]));
+    else if ((m = /^##\s+(.*)/.exec(line))) push("h2", stripInline(m[1]));
+    else if ((m = /^#\s+(.*)/.exec(line))) push("h1", stripInline(m[1]));
+    else if ((m = /^[-*+]\s+(.*)/.exec(line))) push("bulleted", stripInline(m[1]));
+    else if ((m = /^\d+[.)]\s+(.*)/.exec(line))) push("numbered", stripInline(m[1]));
+    else push("paragraph", stripInline(line));
+  }
+  if (blocks.length === 0) push("paragraph", "");
+  return blocks;
+}
 
 /** Validate + clamp the untrusted request body into a clean transcript. */
 function sanitizeMessages(input: unknown): ChatMessage[] {
@@ -137,6 +178,50 @@ export async function POST(req: Request) {
               };
             },
           ),
+          // Create a real document in the signed-in user's workspace. The insert
+          // is RLS-scoped to `user.id`, and the body is parsed into the editor's
+          // plain-text block model (XSS-safe) — see markdownToBlocks.
+          tool(
+            "create_document",
+            "Create and save a new note/document in the user's Libra workspace. Use this when " +
+              "the user asks to create, draft, write, or start a note or document. Give a short " +
+              "title and the body as Markdown (use #/##/### headings, '- ' bullets, '1.' lists, " +
+              "**bold**). The document is saved privately to the user's account.",
+            {
+              title: z.string().describe("Short document title, e.g. 'Weekly meeting agenda'"),
+              content: z.string().describe("The document body as Markdown."),
+            },
+            async ({ title, content }) => {
+              const cleanTitle = (title || "Untitled").trim().slice(0, MAX_DOC_TITLE) || "Untitled";
+              const blocks = markdownToBlocks((content || "").slice(0, MAX_DOC_CONTENT));
+              const { data, error } = await supabase
+                .from("documents")
+                .insert({ user_id: user.id, title: cleanTitle, content: blocks })
+                .select("id")
+                .single();
+              if (error || !data) {
+                return {
+                  content: [
+                    {
+                      type: "text" as const,
+                      text: `Failed to create the document: ${error?.message ?? "unknown error"}.`,
+                    },
+                  ],
+                };
+              }
+              send({ type: "document", id: data.id as string, title: cleanTitle });
+              return {
+                content: [
+                  {
+                    type: "text" as const,
+                    text:
+                      `Created the document "${cleanTitle}" (${blocks.length} block(s)). It's saved and ` +
+                      "shown to the user with an Open button — briefly confirm it's ready.",
+                  },
+                ],
+              };
+            },
+          ),
         ],
       });
 
@@ -164,7 +249,7 @@ export async function POST(req: Request) {
             effort: "low", // snappy chat replies; the prompt is prescriptive
             maxTurns: MAX_TURNS,
             mcpServers: { libra: imageServer },
-            allowedTools: ["mcp__libra__search_images"],
+            allowedTools: ["mcp__libra__search_images", "mcp__libra__create_document"],
             // SECURITY: disable every built-in tool (Bash/Read/Write/WebFetch/…)
             // so a prompt-injected message can't run shell commands, read host
             // files like .env, or exfiltrate data. Only the image tool above is

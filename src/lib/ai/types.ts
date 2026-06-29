@@ -27,5 +27,6 @@ export type ImageResult = {
 export type StreamEvent =
   | { type: "text"; text: string }
   | { type: "images"; query: string; images: ImageResult[] }
+  | { type: "document"; id: string; title: string }
   | { type: "error"; error: string }
   | { type: "done" };
