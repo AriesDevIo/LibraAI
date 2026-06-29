@@ -53,14 +53,85 @@ Live recordings of the two structural controls (full matrix in [`docs/SECURITY-T
 
 ## Getting started
 
+### Run it locally (for reviewers / the teacher) 👀
+
+Libra talks to a **hosted** Supabase backend (Postgres + Auth + Storage), so you
+**don't** need to install or configure a database. You only need **two** values
+from the author — the Supabase URL and its **publishable (anon) key** (both are
+safe to share: the anon key is shipped to the browser and every request is still
+constrained by Row Level Security). The author sends these to you; `.env.local`
+itself stays gitignored.
+
+**Prerequisites:** [Node.js](https://nodejs.org) 20 or newer, and `npm`.
+
+**1. Clone and install**
+
 ```bash
-npm install      # if dependencies aren't installed yet
-npm run dev      # start the dev server → http://localhost:3000
+git clone https://github.com/AriesDevIo/LibraAI.git
+cd LibraAI
+npm install
 ```
 
-Other scripts:
+**2. Create your env file** from the template, then paste in the values the
+author gave you:
 
 ```bash
+cp .env.example .env.local
+```
+
+`.env.local` (already gitignored — never commit it):
+
+```bash
+# Keep this EXACTLY as-is: port 3000 is what Supabase allow-lists for the login redirect.
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
+
+# Supabase — the only two values you actually need (provided by the author).
+NEXT_PUBLIC_SUPABASE_URL=https://<project>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<provided by the author>
+
+# Optional — leave BLANK; not required to run or test the app:
+#  • SUPABASE_SERVICE_ROLE_KEY is never read at runtime (it only sits on the
+#    denylist that the AI subprocess strips), so it doesn't need a value.
+#  • ANTHROPIC_API_KEY isn't used either — the AI authenticates via the Claude
+#    Max subscription, not this key (see the AI note below).
+SUPABASE_SERVICE_ROLE_KEY=
+ANTHROPIC_API_KEY=
+```
+
+**3. Start the app**
+
+```bash
+npm run dev      # → http://localhost:3000
+```
+
+**4. Sign in.** Open <http://localhost:3000>, choose **Create an account** (or
+**Log in**), enter your email, then **click the magic link** in your inbox.
+
+> ℹ️ On Supabase's free tier the email contains a **magic link only** — the
+> 6-digit code box won't be auto-filled, so just click the link. You then land in
+> **your own private account**; your notes are isolated from every other user —
+> that's the A01 access-control guarantee in action.
+
+**5. Test the security matrix.** Reproduce the OWASP **T01–T05** tests using
+[`docs/SECURITY-TESTS.md`](docs/SECURITY-TESTS.md) and the walk-through in
+[`docs/DEMO.md`](docs/DEMO.md).
+
+> ⚠️ **AI assistant — one extra requirement.** Everything above (block editor,
+> canvas, login, document persistence, image upload, and all five security tests)
+> works with just the env values. The **AI assistant is the one exception:** it
+> runs through the Claude Agent SDK on the developer's **Claude Max
+> subscription** (it spawns the Claude Code subprocess, so it's **dev-only** and
+> not on a hosted deploy). To use it on your machine you must have Claude
+> credentials present — either be **logged into Claude Code locally**, or add a
+> `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`, signed in to a Max
+> account) to `.env.local`. Without that, the app still runs — only AI replies
+> error. See [Not implemented](#not-implemented-honest-scope).
+
+### Scripts
+
+```bash
+npm install      # install dependencies
+npm run dev      # start the dev server → http://localhost:3000
 npm run build    # production build (type-check + lint + bundle)
 npm run lint     # ESLint
 npm start        # serve the production build
