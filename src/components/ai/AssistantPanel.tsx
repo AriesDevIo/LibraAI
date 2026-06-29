@@ -50,6 +50,7 @@ export default function AssistantPanel({
   onClose,
   focusSignal,
   title = "Assistant",
+  handoffKey,
 }: {
   /** Returns the current document's plain text to send as context. */
   getContext?: () => string;
@@ -58,6 +59,8 @@ export default function AssistantPanel({
   /** Increment to focus the composer (e.g. when the panel is opened). */
   focusSignal?: number;
   title?: string;
+  /** sessionStorage key holding a prompt to auto-send once on mount (home hero). */
+  handoffKey?: string;
 }) {
   const [messages, setMessages] = useState<UIMessage[]>([]);
   const [input, setInput] = useState("");
@@ -79,6 +82,22 @@ export default function AssistantPanel({
   useEffect(() => {
     if (focusSignal) inputRef.current?.focus();
   }, [focusSignal]);
+
+  // Auto-send a prompt handed off from the home hero (read + clear, once).
+  const didHandoff = useRef(false);
+  useEffect(() => {
+    if (didHandoff.current || !handoffKey) return;
+    didHandoff.current = true;
+    let prompt = "";
+    try {
+      prompt = window.sessionStorage.getItem(handoffKey) ?? "";
+      if (prompt) window.sessionStorage.removeItem(handoffKey);
+    } catch {
+      /* sessionStorage unavailable */
+    }
+    if (prompt.trim()) void send(prompt.trim());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handoffKey]);
 
   const patch = (id: number, fn: (m: UIMessage) => UIMessage) =>
     setMessages((prev) => prev.map((m) => (m.id === id ? fn(m) : m)));
