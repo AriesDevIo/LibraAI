@@ -121,6 +121,62 @@ export function newId(): string {
   return `obj_${idCounter}`;
 }
 
+/** Bump the id counter past any loaded `obj_N` ids so newly created objects
+ *  never collide with persisted ones. Call once after loading a document. */
+export function reserveIds(objects: { id: string }[]): void {
+  for (const o of objects) {
+    const m = /^obj_(\d+)$/.exec(o.id);
+    if (m) idCounter = Math.max(idCounter, Number(m[1]));
+  }
+}
+
+const COLOR_KEY_SET = new Set<ColorKey>(COLOR_SWATCHES.map((s) => s.key));
+
+/**
+ * Validate + normalise canvas objects loaded from storage (or about to be
+ * stored). Drops anything malformed, clamps sizes, and forces `color` back into
+ * the closed set — so a tampered jsonb payload can never reintroduce the CSS/URL
+ * injection holes the in-memory model closes. Image `src` is still re-validated
+ * at render time by CanvasObjectView; here we only keep it a plain string.
+ */
+export function sanitizeCanvas(raw: unknown): CanvasObject[] {
+  if (!Array.isArray(raw)) return [];
+  const num = (v: unknown, d: number) =>
+    typeof v === "number" && Number.isFinite(v) ? v : d;
+  const out: CanvasObject[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const o = item as Record<string, unknown>;
+    if (typeof o.id !== "string") continue;
+    const color: ColorKey = COLOR_KEY_SET.has(o.color as ColorKey)
+      ? (o.color as ColorKey)
+      : "violet";
+    const base = {
+      id: o.id,
+      x: num(o.x, 0),
+      y: num(o.y, 0),
+      width: Math.max(MIN_SIZE.width, num(o.width, DEFAULT_TEXT_SIZE.width)),
+      height: Math.max(MIN_SIZE.height, num(o.height, DEFAULT_TEXT_SIZE.height)),
+      color,
+    };
+    if (o.type === "text") {
+      out.push({
+        ...base,
+        type: "text",
+        text: typeof o.text === "string" ? o.text : "",
+      });
+    } else if (o.type === "image") {
+      out.push({
+        ...base,
+        type: "image",
+        src: typeof o.src === "string" ? o.src : "",
+        alt: typeof o.alt === "string" ? o.alt : "",
+      });
+    }
+  }
+  return out;
+}
+
 /** Create a text note with sensible defaults. */
 export function createTextObject(overrides: Partial<TextObject> = {}): TextObject {
   return {

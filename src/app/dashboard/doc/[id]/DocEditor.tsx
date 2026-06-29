@@ -8,6 +8,7 @@ import Canvas from "@/components/canvas/Canvas";
 import AssistantPanel from "@/components/ai/AssistantPanel";
 import { updateDocument } from "@/app/dashboard/actions";
 import type { Block } from "@/components/editor/types";
+import type { CanvasObject } from "@/components/canvas/types";
 
 type SaveStatus = "saved" | "saving" | "error";
 type View = "editor" | "canvas";
@@ -26,10 +27,12 @@ export default function DocEditor({
   docId,
   initialTitle,
   initialBlocks,
+  initialCanvas,
 }: {
   docId: string;
   initialTitle: string;
   initialBlocks: Block[];
+  initialCanvas: CanvasObject[];
 }) {
   const [status, setStatus] = useState<SaveStatus>("saved");
   const [view, setView] = useState<View>("editor");
@@ -38,29 +41,45 @@ export default function DocEditor({
   const [focusTick, setFocusTick] = useState(0);
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Latest editor state, kept in a ref so the assistant can read note text on
-  // demand without re-rendering this tree on every keystroke.
-  const latest = useRef<{ title: string; blocks: Block[] }>({
+  // Latest document state across BOTH views, kept in a ref so the assistant can
+  // read note text on demand and so either view's edit saves the whole record.
+  const latest = useRef<{ title: string; blocks: Block[]; canvas: CanvasObject[] }>({
     title: initialTitle,
     blocks: initialBlocks,
+    canvas: initialCanvas,
   });
   const toggleBtnRef = useRef<HTMLButtonElement>(null);
 
-  const onChange = useCallback(
+  // Debounced autosave of the whole row (title + blocks + canvas).
+  const scheduleSave = useCallback(() => {
+    setStatus("saving");
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(async () => {
+      const cur = latest.current;
+      const res = await updateDocument(docId, {
+        title: cur.title,
+        content: cur.blocks,
+        canvas: cur.canvas,
+      });
+      setStatus(res?.ok ? "saved" : "error");
+    }, 800);
+  }, [docId]);
+
+  const onEditorChange = useCallback(
     (data: { title: string; blocks: Block[] }) => {
-      latest.current = data;
+      latest.current = { ...latest.current, title: data.title, blocks: data.blocks };
       setTitle(data.title);
-      setStatus("saving");
-      if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(async () => {
-        const res = await updateDocument(docId, {
-          title: data.title,
-          content: data.blocks,
-        });
-        setStatus(res?.ok ? "saved" : "error");
-      }, 800);
+      scheduleSave();
     },
-    [docId],
+    [scheduleSave],
+  );
+
+  const onCanvasChange = useCallback(
+    (objects: CanvasObject[]) => {
+      latest.current = { ...latest.current, canvas: objects };
+      scheduleSave();
+    },
+    [scheduleSave],
   );
 
   const getContext = useCallback(
@@ -152,7 +171,7 @@ export default function DocEditor({
             <BlockEditor
               initialTitle={initialTitle}
               initialBlocks={initialBlocks}
-              onChange={onChange}
+              onChange={onEditorChange}
             />
           </div>
           <div
@@ -163,7 +182,7 @@ export default function DocEditor({
             hidden={view !== "canvas"}
             className="h-full outline-none"
           >
-            <Canvas />
+            <Canvas initialObjects={initialCanvas} onChange={onCanvasChange} />
           </div>
         </main>
 

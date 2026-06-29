@@ -1,10 +1,5 @@
 import type { ComponentProps, ComponentType } from "react";
-import {
-  DocumentText,
-  Widget,
-  MagicStick3,
-  Settings,
-} from "@solar-icons/react/ssr";
+import { DocumentText, MagicStick3, Settings } from "@solar-icons/react/ssr";
 
 /** All Solar icons share one props shape; type against any of them. */
 type SolarIcon = ComponentType<ComponentProps<typeof DocumentText>>;
@@ -16,13 +11,15 @@ export interface NavItem {
 }
 
 /**
- * The single source of truth for the authenticated sidebar nav. These hrefs are
- * owned by other tabs (Canvas/Assistant/Settings) and resolve once those land —
- * the shell links to them regardless so navigation is wired up front.
+ * The single source of truth for the authenticated sidebar nav.
+ *
+ * There is intentionally NO top-level "Canvas" item: the freeform canvas is a
+ * view INSIDE a document (Editor ⇄ Canvas), saved on that document's row — so a
+ * standalone, unsaved canvas board would only be a confusing duplicate. The
+ * Assistant remains reachable both globally (here) and inside a document.
  */
 export const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Documents", Icon: DocumentText },
-  { href: "/dashboard/canvas", label: "Canvas", Icon: Widget },
   { href: "/dashboard/assistant", label: "Assistant", Icon: MagicStick3 },
   { href: "/dashboard/settings", label: "Settings", Icon: Settings },
 ];

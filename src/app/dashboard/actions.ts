@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import type { Block } from "@/components/editor/types";
+import { sanitizeCanvas, type CanvasObject } from "@/components/canvas/types";
 import { requireUser } from "@/lib/documents";
 
 /**
@@ -30,15 +31,24 @@ export async function createDocument(): Promise<void> {
 /** Save title and/or blocks. RLS guarantees only the owner's row is touched. */
 export async function updateDocument(
   id: string,
-  patch: { title?: string; content?: Block[] },
+  patch: { title?: string; content?: Block[]; canvas?: CanvasObject[] },
 ): Promise<{ ok: boolean; error?: string }> {
   const { supabase } = await requireUser();
   const update: Record<string, unknown> = {};
   if (patch.title !== undefined) update.title = patch.title;
   if (patch.content !== undefined) update.content = patch.content;
+  // Re-sanitise on the server too (defence in depth) before storing.
+  if (patch.canvas !== undefined) update.canvas = sanitizeCanvas(patch.canvas);
   if (Object.keys(update).length === 0) return { ok: true };
 
-  const { error } = await supabase.from("documents").update(update).eq("id", id);
+  let { error } = await supabase.from("documents").update(update).eq("id", id);
+  // Tolerate a database without the canvas column yet: retry without it so the
+  // rest of the document still saves.
+  if (error && "canvas" in update) {
+    delete update.canvas;
+    if (Object.keys(update).length === 0) return { ok: true };
+    ({ error } = await supabase.from("documents").update(update).eq("id", id));
+  }
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }

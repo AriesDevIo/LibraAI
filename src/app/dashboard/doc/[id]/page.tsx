@@ -23,6 +23,7 @@ export default async function DocPage({
       docId={doc.id}
       initialTitle={doc.title}
       initialBlocks={doc.content}
+      initialCanvas={doc.canvas}
     />
   );
 }

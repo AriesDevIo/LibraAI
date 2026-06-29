@@ -9,6 +9,7 @@ import {
   type ColorKey,
   createImageObject,
   createTextObject,
+  reserveIds,
   DEFAULT_IMAGE_SIZE,
   DEFAULT_TEXT_SIZE,
   MIN_SIZE,
@@ -27,14 +28,9 @@ type Gesture =
       origH: number;
     };
 
-/**
- * Freeform canvas in local React state (no backend). Objects live in world
- * coordinates; a `camera` offset pans the whole world. Pointer Events drive
- * move / resize / pan (mouse + touch), with the container owning pointer capture
- * so gestures keep working even if the pointer leaves an element.
- */
-export default function Canvas() {
-  const [objects, setObjects] = useState<CanvasObject[]>(() => [
+/** Demo board for the standalone (non-document) canvas. */
+function demoSeed(): CanvasObject[] {
+  return [
     createTextObject({
       x: 56,
       y: 44,
@@ -59,7 +55,32 @@ export default function Canvas() {
       height: 96,
       text: "Pan the canvas: drag an empty area, or scroll / two-finger swipe.",
     }),
-  ]);
+  ];
+}
+
+interface CanvasProps {
+  /** Saved objects to load (document mode). When omitted, the standalone demo
+   *  seed is used; pass `[]` for an empty board. */
+  initialObjects?: CanvasObject[];
+  /** Fired (on every change) with the current objects. The parent debounces and
+   *  persists. Omit for the standalone, non-persisted board. */
+  onChange?: (objects: CanvasObject[]) => void;
+}
+
+/**
+ * Freeform canvas. Objects live in world coordinates; a `camera` offset pans the
+ * whole world. Pointer Events drive move / resize / pan (mouse + touch), with the
+ * container owning pointer capture so gestures keep working even if the pointer
+ * leaves an element.
+ *
+ * In document mode it's a controlled-ish component: seeded from `initialObjects`
+ * and emitting every change to `onChange`, exactly like the block editor — so
+ * the board is saved on the document row (no more vanishing canvases).
+ */
+export default function Canvas({ initialObjects, onChange }: CanvasProps = {}) {
+  const [objects, setObjects] = useState<CanvasObject[]>(() =>
+    initialObjects !== undefined ? initialObjects : demoSeed(),
+  );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [camera, setCamera] = useState({ x: 0, y: 0 });
@@ -68,6 +89,23 @@ export default function Canvas() {
 
   const containerRef = useRef<HTMLDivElement>(null);
   const gesture = useRef<Gesture | null>(null);
+
+  // Emit changes to the parent (document mode), skipping the initial mount, and
+  // reserve ids past the loaded objects so new ones never collide.
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+  const mounted = useRef(false);
+  useEffect(() => {
+    reserveIds(initialObjects ?? []);
+    mounted.current = true;
+    // run once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (mounted.current) onChangeRef.current?.(objects);
+  }, [objects]);
 
   const selected = objects.find((o) => o.id === selectedId) ?? null;
   const currentColor: ColorKey = selected?.color ?? defaultColor;

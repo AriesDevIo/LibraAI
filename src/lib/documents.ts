@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import type { Block } from "@/components/editor/types";
+import { sanitizeCanvas, type CanvasObject } from "@/components/canvas/types";
 
 /**
  * Per-user document data layer. Every call goes through the cookie-based server
@@ -20,6 +21,8 @@ export interface DocumentRecord {
   id: string;
   title: string;
   content: Block[];
+  /** Freeform-canvas objects for this document's Canvas view. */
+  canvas: CanvasObject[];
 }
 
 /** Resolve the signed-in user or bounce to /login. Shared with the dashboard
@@ -51,16 +54,29 @@ export async function listDocuments(): Promise<DocumentMeta[]> {
  */
 export async function getDocument(id: string): Promise<DocumentRecord | null> {
   const { supabase } = await requireUser();
-  const { data, error } = await supabase
+  const primary = await supabase
     .from("documents")
-    .select("id, title, content")
+    .select("id, title, content, canvas")
     .eq("id", id)
     .maybeSingle();
-  if (error || !data) return null;
+
+  let row: Record<string, unknown> | null = primary.data ?? null;
+  if (primary.error) {
+    // Tolerate a database that hasn't run the canvas migration yet.
+    const fb = await supabase
+      .from("documents")
+      .select("id, title, content")
+      .eq("id", id)
+      .maybeSingle();
+    if (fb.error || !fb.data) return null;
+    row = fb.data as Record<string, unknown>;
+  }
+  if (!row) return null;
   return {
-    id: data.id,
-    title: data.title,
-    content: Array.isArray(data.content) ? (data.content as Block[]) : [],
+    id: row.id as string,
+    title: row.title as string,
+    content: Array.isArray(row.content) ? (row.content as Block[]) : [],
+    canvas: sanitizeCanvas(row.canvas),
   };
 }
 
