@@ -1,145 +1,95 @@
-import Link from "next/link";
-import {
-  AddSquare,
-  DocumentText,
-  TrashBinMinimalistic,
-} from "@solar-icons/react/ssr";
-import { listDocuments } from "@/lib/documents";
-import { createDocument, deleteDocument } from "@/app/dashboard/actions";
-import AssistantPanel from "@/components/ai/AssistantPanel";
-
-/** Format an ISO timestamp as a short, locale-aware "updated" label. */
-function updatedLabel(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+import { AltArrowDown } from "@solar-icons/react/ssr";
+import { createClient } from "@/lib/supabase/server";
+import { HomePrompt } from "./HomePrompt";
+import DocumentsSection from "./DocumentsSection";
 
 /**
- * Dashboard home — AI-first, like AriesAI's project screen. The assistant leads
- * (it can draft answers, find images, and CREATE documents for you), with the
- * user's document list below. Everything is RLS-scoped to this user (A01); the
- * surrounding shell provides the sidebar/chrome and already gated auth.
+ * Home tab — AI-first, like AriesAI: a full-height violet hero with a prompt box
+ * (the assistant drafts notes, finds images, and can CREATE documents), and the
+ * user's documents below the fold. The dedicated Documents tab shows the same
+ * list on its own. The shell provides the sidebar/chrome and already gated auth.
  */
 export default async function DashboardPage() {
-  const docs = await listDocuments();
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { data: profile } = user
+    ? await supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle()
+    : { data: null };
+  const firstName = (profile?.display_name?.split(" ")[0] || "there").trim();
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 sm:py-10">
-      {/* AI hero */}
-      <section className="mb-10">
-        <h1
-          className="text-2xl font-extrabold tracking-tight"
-          style={{ color: "var(--color-fg)" }}
-        >
-          What do you want to write?
-        </h1>
-        <p className="mt-1 text-sm" style={{ color: "var(--color-accent)" }}>
-          Ask Libra to draft a note, summarize an idea, or find images — it can
-          create documents for you.
-        </p>
+    <div style={{ background: "var(--color-bg)" }}>
+      {/* Hero — full-height centered prompt over the violet backdrop */}
+      <section
+        className="relative flex min-h-[100dvh] w-full items-center justify-center overflow-hidden"
+        style={{
+          background:
+            "radial-gradient(ellipse 80% 60% at 50% 0%, rgba(23,20,28,1) 0%, rgba(23,20,28,0.4) 40%, transparent 70%), radial-gradient(ellipse 90% 70% at 50% 100%, var(--color-secondary) 0%, var(--color-primary) 35%, transparent 72%), linear-gradient(180deg, #1b1430 0%, #0f0a1c 100%)",
+        }}
+      >
+        {/* Animated glow blobs (match the auth layout) */}
         <div
-          className="mt-5 flex h-[clamp(420px,62vh,640px)] flex-col rounded-2xl p-3 sm:p-4"
+          className="pointer-events-none absolute rounded-full"
           style={{
-            background: "var(--color-surface)",
-            border: "1px solid var(--color-surface-border)",
+            width: "55%",
+            height: "55%",
+            top: "10%",
+            left: "20%",
+            background: "radial-gradient(circle, var(--color-glow) 0%, transparent 70%)",
+            opacity: 0.3,
+            filter: "blur(52px)",
+            animation: "libra-float 8s ease-in-out infinite",
           }}
+          aria-hidden="true"
+        />
+        <div
+          className="pointer-events-none absolute rounded-full"
+          style={{
+            width: "45%",
+            height: "45%",
+            bottom: "8%",
+            right: "10%",
+            background: "radial-gradient(circle, var(--color-secondary) 0%, transparent 70%)",
+            opacity: 0.42,
+            filter: "blur(52px)",
+            animation: "libra-float-alt 9s ease-in-out infinite",
+          }}
+          aria-hidden="true"
+        />
+        {/* Subtle grain overlay */}
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.08] mix-blend-overlay"
+          style={{
+            backgroundImage: "radial-gradient(rgba(255,255,255,0.6) 1px, transparent 1px)",
+            backgroundSize: "3px 3px",
+          }}
+          aria-hidden="true"
+        />
+
+        <div className="relative z-10 w-full py-20">
+          <HomePrompt firstName={firstName} />
+        </div>
+
+        {/* Scroll cue → documents below the fold */}
+        <a
+          href="#documents"
+          aria-label="Your documents"
+          className="absolute bottom-6 left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-1 text-white/55 transition-colors hover:text-white/90"
         >
-          <AssistantPanel />
-        </div>
+          <span className="text-[11px] font-medium uppercase tracking-wider">Documents</span>
+          <span className="motion-safe:animate-bounce">
+            <AltArrowDown size={18} color="currentColor" weight="Bold" />
+          </span>
+        </a>
       </section>
 
-      {/* Documents */}
-      <section>
-        <div className="flex items-center justify-between gap-4">
-          <h2
-            className="text-lg font-bold tracking-tight"
-            style={{ color: "var(--color-fg)" }}
-          >
-            Your documents
-          </h2>
-          <form action={createDocument}>
-            <button
-              type="submit"
-              className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-secondary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg)]"
-              style={{ background: "var(--color-secondary)" }}
-            >
-              <AddSquare size={16} color="#ffffff" weight="Bold" />
-              New document
-            </button>
-          </form>
-        </div>
-
-        {docs.length === 0 ? (
-          <div
-            className="mt-6 rounded-2xl p-10 text-center"
-            style={{
-              background: "var(--color-surface)",
-              border: "1px solid var(--color-surface-border)",
-            }}
-          >
-            <DocumentText size={32} color="var(--color-secondary)" weight="Bold" />
-            <p className="mt-3 font-semibold" style={{ color: "var(--color-fg)" }}>
-              No documents yet
-            </p>
-            <p className="mt-1 text-sm" style={{ color: "var(--color-accent)" }}>
-              Ask the assistant above to create one, or start a blank note — it&apos;s
-              saved privately to your account.
-            </p>
-          </div>
-        ) : (
-          <ul className="mt-6 space-y-2">
-            {docs.map((doc) => (
-              <li
-                key={doc.id}
-                className="flex items-center gap-3 rounded-xl px-4 py-3 transition-colors hover:bg-[color-mix(in_srgb,var(--color-secondary)_7%,transparent)]"
-                style={{
-                  background: "var(--color-surface)",
-                  border: "1px solid var(--color-surface-border)",
-                }}
-              >
-                <DocumentText
-                  size={18}
-                  color="var(--color-secondary-text)"
-                  weight="Bold"
-                />
-                <Link href={`/dashboard/doc/${doc.id}`} className="min-w-0 flex-1">
-                  <span
-                    className="block truncate font-medium"
-                    style={{ color: "var(--color-fg)" }}
-                  >
-                    {doc.title || "Untitled"}
-                  </span>
-                  <span
-                    className="block text-xs"
-                    style={{ color: "var(--color-accent)" }}
-                  >
-                    Updated {updatedLabel(doc.updated_at)}
-                  </span>
-                </Link>
-                <form action={deleteDocument.bind(null, doc.id)}>
-                  <button
-                    type="submit"
-                    aria-label={`Delete ${doc.title || "Untitled"}`}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-[color-mix(in_srgb,var(--color-rose,#e11d48)_14%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-secondary)]"
-                    style={{ color: "var(--color-accent)" }}
-                  >
-                    <TrashBinMinimalistic
-                      size={16}
-                      color="currentColor"
-                      weight="Bold"
-                    />
-                  </button>
-                </form>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      {/* Documents below the fold (same list as the Documents tab) */}
+      <DocumentsSection
+        id="documents"
+        className="mx-auto w-full max-w-3xl scroll-mt-6 px-4 py-12 sm:px-6"
+      />
     </div>
   );
 }
