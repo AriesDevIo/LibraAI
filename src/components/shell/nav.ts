@@ -13,26 +13,28 @@ export interface NavItem {
 /**
  * The single source of truth for the authenticated sidebar nav.
  *
+ * - Home is the AI: a prompt hero that drafts notes and creates documents, with
+ *   the document list below the fold.
+ * - Documents is the full document list on its own.
+ * The Assistant has no standalone tab — it lives on Home (and inside a document).
+ *
  * There is intentionally NO top-level "Canvas" item: the freeform canvas is a
- * view INSIDE a document (Editor ⇄ Canvas), saved on that document's row — so a
- * standalone, unsaved canvas board would only be a confusing duplicate. The
- * Assistant remains reachable both globally (here) and inside a document.
+ * view INSIDE a document (Editor ⇄ Canvas), saved on that document's row.
  */
 export const NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard", label: "Documents", Icon: DocumentText },
-  { href: "/dashboard/assistant", label: "Assistant", Icon: MagicStick3 },
+  { href: "/dashboard", label: "Home", Icon: MagicStick3 },
+  { href: "/dashboard/docs", label: "Documents", Icon: DocumentText },
   { href: "/dashboard/settings", label: "Settings", Icon: Settings },
 ];
 
 /**
- * Active-link test. "/dashboard" must match exactly (it's the index), while the
- * deeper sections also light up for their nested routes (e.g. /dashboard/doc/x
- * keeps "Documents" active).
+ * Active-link test. Home ("/dashboard") matches only the index; Documents owns
+ * the documents list AND the document editor routes (/dashboard/doc/x).
  */
 export function isActive(pathname: string, href: string): boolean {
-  if (href === "/dashboard") {
-    // Documents owns the index AND the document editor routes.
-    return pathname === "/dashboard" || pathname.startsWith("/dashboard/doc");
+  if (href === "/dashboard") return pathname === "/dashboard";
+  if (href === "/dashboard/docs") {
+    return pathname.startsWith("/dashboard/doc"); // covers /docs and /doc/[id]
   }
   return pathname === href || pathname.startsWith(href + "/");
 }
