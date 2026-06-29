@@ -92,6 +92,9 @@ export default function Canvas({ initialObjects, onChange }: CanvasProps = {}) {
 
   const containerRef = useRef<HTMLDivElement>(null);
   const gesture = useRef<Gesture | null>(null);
+  // Tracks the last pointerdown per object so we can detect a double-click/tap
+  // ourselves (pointer capture suppresses the native `dblclick` on the note).
+  const lastTap = useRef<{ id: string; time: number } | null>(null);
 
   // Emit changes to the parent (document mode), skipping the initial mount, and
   // reserve ids past the loaded objects so new ones never collide.
@@ -228,6 +231,25 @@ export default function Canvas({ initialObjects, onChange }: CanvasProps = {}) {
       if (editingId === id) return;
       const obj = objects.find((o) => o.id === id);
       if (!obj) return;
+
+      // Double-click / double-tap to edit. Detected here rather than via the DOM
+      // `dblclick` event, because the container takes pointer capture for
+      // dragging, which retargets `dblclick` away from the note so its handler
+      // never fires. Text objects only.
+      const lt = lastTap.current;
+      if (
+        obj.type === "text" &&
+        lt &&
+        lt.id === id &&
+        e.timeStamp - lt.time < 350
+      ) {
+        lastTap.current = null;
+        setSelectedId(id);
+        setEditingId(id);
+        return; // no drag, no pointer capture → the textarea can focus & type
+      }
+      lastTap.current = { id, time: e.timeStamp };
+
       gesture.current = {
         kind: "drag",
         id,
